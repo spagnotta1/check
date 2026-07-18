@@ -88,6 +88,9 @@ class PlaidAdapter(FinancialInstitutionAdapter):
             # investments support and would be blocked entirely).
             "products": ["transactions"],
             "required_if_supported_products": ["investments"],
+            # Plaid defaults to ~90 days of history; ask for the maximum
+            # (2 years) so the initial backfill covers everything available.
+            "transactions": {"days_requested": 730},
             "country_codes": ["US"],
             "language": "en",
         }
@@ -126,23 +129,48 @@ class PlaidAdapter(FinancialInstitutionAdapter):
 
     def _fetch_transactions_raw(self, raw_accounts: Any) -> Dict[str, Any]:
         cursor = self.credentials.get("cursor")
-        if not self.is_live:
-            data = self.sandbox.sync_transactions(cursor)
-        else:
-            data = self._plaid_call("transactions/sync", {
-                "access_token": self.credentials["access_token"],
-                "cursor": cursor or "",
-            })
+        # transactions/sync is paginated (up to `count` transactions per page,
+        # `has_more` signals another page at `next_cursor`) — drain every page
+        # so a fresh connection's full backlog lands in one sync.
+        merged: Dict[str, Any] = {"added": [], "modified": [], "removed": []}
+        while True:
+            if not self.is_live:
+                data = self.sandbox.sync_transactions(cursor)
+            else:
+                data = self._plaid_call("transactions/sync", {
+                    "access_token": self.credentials["access_token"],
+                    "cursor": cursor or "",
+                    "count": 500,
+                })
+            for key in merged:
+                merged[key].extend(data.get(key) or [])
+            cursor = data.get("next_cursor", cursor)
+            if not data.get("has_more"):
+                break
         # Advances the stored cursor so the *next* sync is incremental; the
         # engine persists this back to the encrypted connection after sync().
-        self.credentials["cursor"] = data.get("next_cursor", cursor)
-        return data
+        self.credentials["cursor"] = cursor
+        merged["next_cursor"] = cursor
+        return merged
+
+    # Link only *requests* investments where supported
+    # (required_if_supported_products), so items at banks without the product
+    # (e.g. Capital One) reject investments/holdings/get outright. Treat those
+    # rejections — and "data not pulled yet" — as "no holdings" rather than
+    # failing the whole sync.
+    _NO_HOLDINGS_CODES = ("PRODUCTS_NOT_SUPPORTED", "PRODUCT_NOT_READY",
+                          "NO_INVESTMENT_ACCOUNTS", "NO_INVESTMENT_AUTH_ACCOUNTS")
 
     def _fetch_holdings_raw(self, raw_accounts: Any) -> Dict[str, Any]:
         if not self.is_live:
             return self.sandbox.get_holdings()
-        return self._plaid_call("investments/holdings/get",
-                                {"access_token": self.credentials["access_token"]})
+        try:
+            return self._plaid_call("investments/holdings/get",
+                                    {"access_token": self.credentials["access_token"]})
+        except AuthenticationError as exc:
+            if getattr(exc, "plaid_error_code", None) in self._NO_HOLDINGS_CODES:
+                return {"holdings": [], "securities": []}
+            raise
 
     # -- normalization ---------------------------------------------------------
 
@@ -294,7 +322,9 @@ class PlaidAdapter(FinancialInstitutionAdapter):
         if error_code == "RATE_LIMIT_EXCEEDED":
             raise RateLimitError("Plaid: rate limited")
         if resp.status_code >= 400:
-            raise AuthenticationError(
+            exc = AuthenticationError(
                 f"Plaid: request rejected ({resp.status_code}) "
                 f"{data.get('error_message', resp.text[:200])}")
+            exc.plaid_error_code = error_code
+            raise exc
         return data

@@ -54,6 +54,23 @@ def test_plaid_cursor_persists_across_a_sync():
     assert adapter.credentials["cursor"] == "sandbox-cursor-1"
 
 
+def test_plaid_sync_drains_all_transaction_pages():
+    # transactions/sync is paginated; a fresh item with a large backlog spans
+    # multiple pages and every page must be fetched, not just the first.
+    adapter = get_adapter_class("plaid")()
+    adapter.credentials = {"mode": "live", "access_token": "tok", "cursor": None}
+    page1 = {"added": [{"transaction_id": "t1"}], "modified": [], "removed": [],
+             "next_cursor": "c1", "has_more": True}
+    page2 = {"added": [{"transaction_id": "t2"}], "modified": [], "removed": [],
+             "next_cursor": "c2", "has_more": False}
+    with patch("finance_sync.adapters.plaid_adapter.requests.post") as mock_post:
+        mock_post.side_effect = [_mock_response(200, page1), _mock_response(200, page2)]
+        raw = adapter._fetch_transactions_raw(None)
+    assert [t["transaction_id"] for t in raw["added"]] == ["t1", "t2"]
+    assert adapter.credentials["cursor"] == "c2"
+    assert mock_post.call_args_list[1].kwargs["json"]["cursor"] == "c1"
+
+
 def test_create_link_token_returns_token_from_plaid():
     adapter = get_adapter_class("plaid")()
     with patch("finance_sync.adapters.plaid_adapter.requests.post") as mock_post:
@@ -93,6 +110,21 @@ def test_rate_limit_maps_to_rate_limit_error():
         mock_post.return_value = _mock_response(400, {"error_code": "RATE_LIMIT_EXCEEDED"})
         with pytest.raises(RateLimitError):
             adapter._fetch_accounts_raw()
+
+
+def test_holdings_unsupported_by_institution_yields_no_holdings():
+    # Capital One (no investments product) rejects investments/holdings/get;
+    # the sync must proceed with zero holdings instead of failing.
+    adapter = get_adapter_class("plaid")()
+    adapter.credentials = {"mode": "live", "access_token": "tok"}
+    with patch("finance_sync.adapters.plaid_adapter.requests.post") as mock_post:
+        mock_post.return_value = _mock_response(
+            400, {"error_code": "PRODUCTS_NOT_SUPPORTED",
+                  "error_message": 'the following products are not supported '
+                                   'by this institution: ["investments"]'})
+        raw = adapter._fetch_holdings_raw(None)
+    assert raw == {"holdings": [], "securities": []}
+    assert adapter._normalize_holdings(None, raw) == []
 
 
 def test_unmapped_error_falls_back_to_authentication_error():
