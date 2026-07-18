@@ -260,16 +260,16 @@
   #theme-btn {
     display: flex;
     align-items: center;
-    gap: 5px;
+    justify-content: center;
     background: none;
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: 50%;
     cursor: pointer;
-    color: color-mix(in srgb, var(--fg) 55%, transparent);
-    font-size: .72rem;
-    font-family: ui-monospace, 'Courier New', monospace;
-    padding: 4px 10px;
-    transition: color .15s, border-color .15s, background .15s;
+    width: 30px;
+    height: 30px;
+    flex-shrink: 0;
+    padding: 0;
+    transition: border-color .15s, background .15s;
   }
   #theme-btn:hover {
     color: var(--fg);
@@ -407,9 +407,8 @@
 
         <!-- Right: theme switcher + logout -->
         <div class="flex items-center gap-2 flex-shrink-0 ml-3 whitespace-nowrap">
-          <button id="theme-btn" onclick="toggleThemePanel()" title="Switch theme">
+          <button id="theme-btn" onclick="toggleThemePanel()" title="Switch theme" aria-label="Switch theme">
             <div class="theme-dot"></div>
-            Theme
           </button>
           <form method="post" action="/logout" class="flex">
             <button type="submit" id="logout-btn" title="Sign out"
