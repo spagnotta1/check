@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Sign in - Checkbook App</title>
+  <title>Create your account - Checkbook App</title>
   <style>
     body {
       margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
@@ -27,17 +27,20 @@
     }
     button:hover { background: #6d28d9; }
     .error { font-size: .8rem; color: #dc2626; margin: 0 0 12px; }
+    .hint  { font-size: .72rem; color: #9ca3af; margin: -6px 0 12px; }
   </style>
 </head>
 <body>
   <form class="card" method="post">
-    <h1>Checkbook App</h1>
-    <p>Sign in to your checkbook.</p>
+    <h1>Welcome to Checkbook</h1>
+    <p>First run — create the owner account for this app. You'll use it to sign in from your PC and phone.</p>
     {% if error %}<p class="error">{{ error }}</p>{% endif %}
-    <input type="text" name="username" placeholder="Username" autofocus
+    <input type="text" name="username" placeholder="Choose a username" autofocus
            autocomplete="username" autocapitalize="none" spellcheck="false">
-    <input type="password" name="password" placeholder="Password" autocomplete="current-password">
-    <button type="submit">Sign in</button>
+    <input type="password" name="password" placeholder="Create a password" autocomplete="new-password">
+    <p class="hint">At least 8 characters. A passphrase of a few random words works well.</p>
+    <input type="password" name="confirm" placeholder="Confirm password" autocomplete="new-password">
+    <button type="submit">Create account</button>
   </form>
 </body>
 </html>

@@ -406,12 +406,18 @@
           </div>
         </div>
 
-        <!-- Right: theme switcher button -->
+        <!-- Right: theme switcher + logout -->
         <div class="flex items-center gap-2">
           <button id="theme-btn" onclick="toggleThemePanel()" title="Switch theme">
             <div class="theme-dot"></div>
             Theme
           </button>
+          <form method="post" action="/logout" class="flex">
+            <button type="submit" id="logout-btn" title="Sign out"
+              class="px-2.5 py-1 text-xs font-medium text-gray-500 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+              Sign out
+            </button>
+          </form>
         </div>
 
       </div>
@@ -430,6 +436,9 @@
       <a href="/anomalies" class="block px-3 py-2 rounded-md text-base font-medium text-gray-500">Anomalies</a>
       <a href="/recurring" class="block px-3 py-2 rounded-md text-base font-medium text-gray-500">Recurring</a>
       <a href="/rules" class="block px-3 py-2 rounded-md text-base font-medium text-gray-500">Rules</a>
+      <form method="post" action="/logout">
+        <button type="submit" class="block w-full text-left px-3 py-2 rounded-md text-base font-medium text-gray-500">Sign out</button>
+      </form>
     </div>
   </div>
 

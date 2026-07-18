@@ -1,4 +1,3 @@
-import hmac
 import io
 import json
 import os
@@ -11,6 +10,7 @@ from calendar import monthrange
 from datetime import datetime, timedelta
 from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, session, Response, stream_with_context
 from flask_migrate import Migrate
+from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 import anthropic
 import pandas as pd
@@ -20,7 +20,7 @@ from sklearn.ensemble import IsolationForest
 from sqlalchemy import func, and_, or_
 
 from config import Config
-from models import (db, Transaction, LogEntry, AccountBalance, Budget, Holding,
+from models import (db, AppUser, Transaction, LogEntry, AccountBalance, Budget, Holding,
                     ChatMessage, Conversation, InstitutionConnection,
                     FinancialAccount, SyncRun)
 from rules import CategoryRules
@@ -113,35 +113,86 @@ def create_app(test_config=None):
     category_rules = CategoryRules()
 
     # ---------------------------------------------------------------------------
-    # Optional password gate — set APP_PASSWORD in .env to require a login.
-    # Required before exposing the app beyond localhost (APP_HOST=0.0.0.0):
-    # there are no per-user accounts, so this is the only thing standing
-    # between the network and your financial data.
+    # Login — a single owner account with a hashed password, created on first
+    # run via /setup. Always on outside the test suite: this app fronts real
+    # financial data, from the PC browser and the phone WebView alike.
     # ---------------------------------------------------------------------------
-    app_password = os.environ.get('APP_PASSWORD')
-    if app_password:
+    app.config.setdefault('SESSION_COOKIE_SAMESITE', 'Lax')
+    app.config['SESSION_COOKIE_SECURE'] = (
+        os.environ.get('APP_HTTPS', '').lower() in ('1', 'true', 'yes'))
+
+    auth_enabled = app.config.get('AUTH_ENABLED', not app.config.get('TESTING'))
+    if auth_enabled:
+        # Failed-attempt throttle: after 5 wrong passwords from one address,
+        # login is refused for 15 minutes (in-memory; resets on restart).
+        _failed_logins = {}
+
+        def _throttled(ip):
+            now = time.time()
+            _failed_logins[ip] = [t for t in _failed_logins.get(ip, []) if now - t < 900]
+            return len(_failed_logins[ip]) >= 5
+
         @app.before_request
         def _require_login():
-            if session.get('authed'):
-                return None
-            if request.endpoint in ('login', 'static'):
+            if session.get('user_id') or request.endpoint in ('login', 'setup', 'static'):
                 return None
             if request.path.startswith('/api/'):
                 return jsonify({'error': 'authentication required'}), 401
             return redirect(url_for('login', next=request.path))
 
-        @app.route('/login', methods=['GET', 'POST'])
-        def login():
+        def _sign_in(user):
+            session.clear()
+            session['user_id'] = user.id
+            session.permanent = True
+
+        def _safe_next():
+            nxt = request.args.get('next', '/')
+            if not nxt.startswith('/') or nxt.startswith('//'):
+                nxt = '/'
+            return nxt
+
+        @app.route('/setup', methods=['GET', 'POST'])
+        def setup():
+            if AppUser.query.first():
+                return redirect(url_for('login'))
             error = None
             if request.method == 'POST':
-                if hmac.compare_digest(request.form.get('password', ''), app_password):
-                    session['authed'] = True
-                    session.permanent = True
-                    nxt = request.args.get('next', '/')
-                    if not nxt.startswith('/') or nxt.startswith('//'):
-                        nxt = '/'
-                    return redirect(nxt)
-                error = 'Wrong password.'
+                username = request.form.get('username', '').strip()
+                password = request.form.get('password', '')
+                if not username:
+                    error = 'Please choose a username.'
+                elif len(password) < 8:
+                    error = 'Password must be at least 8 characters.'
+                elif password != request.form.get('confirm', ''):
+                    error = 'Passwords do not match.'
+                else:
+                    user = AppUser(username=username,
+                                   password_hash=generate_password_hash(password))
+                    db.session.add(user)
+                    db.session.commit()
+                    _sign_in(user)
+                    return redirect('/')
+            return render_template('setup.html', error=error)
+
+        @app.route('/login', methods=['GET', 'POST'])
+        def login():
+            if not AppUser.query.first():
+                return redirect(url_for('setup'))
+            error = None
+            if request.method == 'POST':
+                ip = request.remote_addr or 'unknown'
+                if _throttled(ip):
+                    error = 'Too many failed attempts — try again in 15 minutes.'
+                else:
+                    user = AppUser.query.filter_by(
+                        username=request.form.get('username', '').strip()).first()
+                    if user and check_password_hash(user.password_hash,
+                                                    request.form.get('password', '')):
+                        _failed_logins.pop(ip, None)
+                        _sign_in(user)
+                        return redirect(_safe_next())
+                    _failed_logins.setdefault(ip, []).append(time.time())
+                    error = 'Invalid username or password.'
             return render_template('login.html', error=error)
 
         @app.route('/logout', methods=['POST'])
@@ -1890,13 +1941,9 @@ if __name__ == '__main__':
     if _truthy('APP_HTTPS'):
         ssl_context = _ensure_dev_cert(os.path.dirname(os.path.abspath(__file__)))
 
-    # Default to loopback only. Exposing to the LAN (APP_HOST=0.0.0.0) is
-    # refused without APP_PASSWORD — the app has no accounts, so the password
-    # gate is the only access control over your financial data.
+    # Login is always required (owner account created at /setup on first run),
+    # so LAN exposure via APP_HOST=0.0.0.0 is acceptable; default stays
+    # loopback-only regardless.
     host = os.environ.get('APP_HOST', '127.0.0.1')
-    if host != '127.0.0.1' and not os.environ.get('APP_PASSWORD'):
-        raise SystemExit(
-            f"Refusing to bind to {host} without a password: set APP_PASSWORD "
-            "in .env (or remove APP_HOST to serve localhost only).")
     app.run(host=host, port=int(os.environ.get('APP_PORT', '5000')),
             debug=_truthy('APP_DEBUG', '1'), ssl_context=ssl_context)

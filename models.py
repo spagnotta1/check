@@ -4,6 +4,17 @@ from sqlalchemy import Index
 
 db = SQLAlchemy()
 
+
+class AppUser(db.Model):
+    """Login credentials for the app owner (created via first-run setup)."""
+    __tablename__ = 'app_users'
+
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(80), nullable=False, unique=True)
+    password_hash = db.Column(db.String(255), nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+
 class Transaction(db.Model):
     __tablename__ = 'transactions'
 
