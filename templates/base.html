@@ -394,7 +394,6 @@
           </div>
           <div class="hidden sm:ml-4 sm:flex sm:space-x-3 lg:space-x-4 xl:space-x-7">
             <a href="/" class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center whitespace-nowrap px-1 pt-1 border-b-2 text-sm font-medium">Dashboard</a>
-            <a href="/upload" class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center whitespace-nowrap px-1 pt-1 border-b-2 text-sm font-medium">Upload</a>
             <a href="/transactions" class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center whitespace-nowrap px-1 pt-1 border-b-2 text-sm font-medium">Transactions</a>
             <a href="/anomalies" class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center whitespace-nowrap px-1 pt-1 border-b-2 text-sm font-medium">Anomalies</a>
             <a href="/recurring" class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center whitespace-nowrap px-1 pt-1 border-b-2 text-sm font-medium">Recurring</a>
@@ -429,7 +428,6 @@
   <div id="mobile-menu" class="sm:hidden hidden">
     <div class="px-3 pt-3 pb-2">
       <p class="px-3 pb-1 text-xs font-semibold uppercase tracking-wider text-gray-400">More</p>
-      <a href="/upload" class="block px-3 py-2 rounded-md text-base font-medium text-gray-500">Upload</a>
       <a href="/investments" class="block px-3 py-2 rounded-md text-base font-medium text-gray-500">Investments</a>
       <a href="/connections" class="block px-3 py-2 rounded-md text-base font-medium text-gray-500">Connections</a>
       <a href="/sync-history" class="block px-3 py-2 rounded-md text-base font-medium text-gray-500">Sync History</a>
@@ -653,7 +651,6 @@
     if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA' || target.isContentEditable) return;
     if (e.key === 'D') { spaNavigate('/'); }
     else if (e.key === 'T') { spaNavigate('/transactions'); }
-    else if (e.key === 'U') { spaNavigate('/upload'); }
     else if (e.key === 'I') { spaNavigate('/investments'); }
     else if (e.key === 'C') { spaNavigate('/chat'); }
     else if (e.key === 'Escape') { closeThemePanel(); }
