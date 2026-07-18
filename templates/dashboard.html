@@ -1,0 +1,614 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard – Checkbook App{% endblock %}
+
+{% block content %}
+{% set income_delta = total_income - prev_income %}
+{% set outgo_delta  = total_outgo  - prev_outgo  %}
+{% set net_delta    = net_cashflow - prev_net    %}
+{% set savings_rate = ((net_cashflow / total_income * 100)|round(1)) if total_income > 0 else 0 %}
+
+<style>
+/* Mobile-only overrides — !important beats the inline styles below; no effect ≥768px */
+@media (max-width: 768px) {
+  .dash-cols { grid-template-columns: 1fr !important; }
+}
+@media (max-width: 640px) {
+  .dash-table-scroll { overflow-x: auto !important; }
+  .dash-table-scroll table { min-width: 560px; }
+  .dash-donut { height: 190px !important; }
+
+  /* KPI tiles: 2-up grid like banking-app stat cards */
+  .dash-kpis { grid-template-columns: repeat(2, 1fr) !important; gap: .625rem !important; }
+  .dash-kpis > div { padding: 12px 14px !important; }
+  .dash-kpis p[style*="1.55rem"] { font-size: 1.25rem !important; }
+
+  /* Filter bar: full-width date inputs / selects, comfy tap targets */
+  #dashFilterForm input[type="date"] { flex: 1 1 40%; min-height: 40px; }
+  #dashFilterForm select { flex: 1 1 100%; min-height: 40px; }
+  #dashFilterForm button[type="submit"], #dashFilterForm a { flex: 1 1 auto; text-align: center; padding-top: 9px !important; padding-bottom: 9px !important; }
+  #dashFilterForm button[type="button"] { padding-top: 6px !important; padding-bottom: 6px !important; }
+
+  /* Budget alert rows stack their text and link */
+  .dash-alert { flex-wrap: wrap; }
+}
+</style>
+
+<div style="display:flex;flex-direction:column;gap:1rem;padding-bottom:2rem">
+
+  <!-- ── Filter bar ── -->
+  <div style="background:var(--panel);border-radius:8px;padding:10px 16px;border:1px solid var(--border)">
+    <form id="dashFilterForm" method="GET" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+      <span style="font-size:.72rem;font-weight:600;color:var(--fg);opacity:.5;white-space:nowrap">Quick:</span>
+      {% for lbl,ps in [('This Month','this_month'),('Last Month','last_month'),('Last 3 Mo','last_3mo'),('YTD','ytd'),('Last Year','last_year')] %}
+      <button type="button" onclick="applyDatePreset('{{ ps }}')"
+        style="padding:3px 10px;font-size:.72rem;border-radius:999px;border:1px solid var(--border);background:transparent;color:var(--fg);cursor:pointer">{{ lbl }}</button>
+      {% endfor %}
+      <span style="width:1px;height:18px;background:var(--border);flex-shrink:0"></span>
+      <label style="font-size:.72rem;color:var(--fg);opacity:.6">From</label>
+      <input type="date" name="start_date" id="start_date" value="{{ start_date }}"
+        style="font-size:.78rem;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg)">
+      <label style="font-size:.72rem;color:var(--fg);opacity:.6">To</label>
+      <input type="date" name="end_date" id="end_date" value="{{ end_date }}"
+        style="font-size:.78rem;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg)">
+      <select name="account" id="account"
+        style="font-size:.78rem;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg)">
+        <option value="both" {% if account_filter=='both' %}selected{% endif %}>Both Accounts</option>
+        <option value="Checking" {% if account_filter=='Checking' %}selected{% endif %}>Checking</option>
+        <option value="Savings"  {% if account_filter=='Savings'  %}selected{% endif %}>Savings</option>
+      </select>
+      <button type="submit"
+        style="padding:5px 14px;font-size:.78rem;font-weight:600;border-radius:6px;border:none;background:#6366f1;color:#fff;cursor:pointer">Apply</button>
+      <a href="{{ url_for('clear_filters', next=url_for('dashboard')) }}"
+        style="padding:5px 12px;font-size:.78rem;border-radius:6px;border:1px solid var(--border);color:var(--fg);opacity:.75;text-decoration:none">Clear</a>
+    </form>
+  </div>
+
+  <script>
+  function applyDatePreset(p){
+    var t=new Date(),y=t.getFullYear(),m=t.getMonth();
+    var f=function(d){return d.toISOString().split('T')[0];};
+    var s,e=new Date(t);
+    if(p==='this_month')  s=new Date(y,m,1);
+    else if(p==='last_month'){s=new Date(y,m-1,1);e=new Date(y,m,0);}
+    else if(p==='last_3mo') s=new Date(y,m-3,t.getDate());
+    else if(p==='ytd')      s=new Date(y,0,1);
+    else if(p==='last_year'){s=new Date(y-1,0,1);e=new Date(y-1,11,31);}
+    document.getElementById('start_date').value=f(s);
+    document.getElementById('end_date').value=f(e);
+    document.getElementById('dashFilterForm').submit();
+  }
+  </script>
+
+  <!-- ── KPI cards ── -->
+  <div class="dash-kpis" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.875rem">
+
+    <!-- Net Cash Flow -->
+    <div style="background:var(--panel);border-radius:8px;border-left:4px solid {% if net_cashflow>=0 %}#22c55e{% else %}var(--red,#ef4444){% endif %};padding:14px 18px">
+      <p style="font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--fg);opacity:.5;margin:0 0 5px">Net Cash Flow</p>
+      <p style="font-size:1.55rem;font-weight:700;margin:0;color:{% if net_cashflow>=0 %}#22c55e{% else %}var(--red,#ef4444){% endif %}">${{ "%.0f"|format(net_cashflow) }}</p>
+      <p style="font-size:.7rem;margin:5px 0 0;color:var(--fg);opacity:.45">vs prev:&nbsp;
+        <span style="font-weight:600;color:{% if net_delta>=0 %}#22c55e{% else %}var(--red,#ef4444){% endif %}">
+          {% if net_delta>=0 %}+${{ "%.0f"|format(net_delta) }}{% else %}-${{ "%.0f"|format(net_delta|abs) }}{% endif %}
+        </span>
+      </p>
+    </div>
+
+    <!-- Total Income -->
+    <div style="background:var(--panel);border-radius:8px;border-left:4px solid #22c55e;padding:14px 18px">
+      <p style="font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--fg);opacity:.5;margin:0 0 5px">Total Income</p>
+      <p style="font-size:1.55rem;font-weight:700;margin:0;color:#22c55e">${{ "%.0f"|format(total_income) }}</p>
+      <p style="font-size:.7rem;margin:5px 0 0;color:var(--fg);opacity:.45">vs prev:&nbsp;
+        <span style="font-weight:600;color:{% if income_delta>=0 %}#22c55e{% else %}var(--red,#ef4444){% endif %}">
+          {% if income_delta>=0 %}+${{ "%.0f"|format(income_delta) }}{% else %}-${{ "%.0f"|format(income_delta|abs) }}{% endif %}
+        </span>
+      </p>
+    </div>
+
+    <!-- Total Outgo -->
+    <div style="background:var(--panel);border-radius:8px;border-left:4px solid var(--red,#ef4444);padding:14px 18px">
+      <p style="font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--fg);opacity:.5;margin:0 0 5px">Total Outgo</p>
+      <p style="font-size:1.55rem;font-weight:700;margin:0;color:var(--red,#ef4444)">${{ "%.0f"|format(total_outgo) }}</p>
+      <p style="font-size:.7rem;margin:5px 0 0;color:var(--fg);opacity:.45">vs prev:&nbsp;
+        <span style="font-weight:600;color:{% if outgo_delta<=0 %}#22c55e{% else %}var(--red,#ef4444){% endif %}">
+          {% if outgo_delta>=0 %}+${{ "%.0f"|format(outgo_delta) }}{% else %}-${{ "%.0f"|format(outgo_delta|abs) }}{% endif %}
+        </span>
+      </p>
+    </div>
+
+    <!-- Savings Rate -->
+    <div style="background:var(--panel);border-radius:8px;border-left:4px solid #8b5cf6;padding:14px 18px">
+      <p style="font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--fg);opacity:.5;margin:0 0 5px">Savings Rate</p>
+      <p style="font-size:1.55rem;font-weight:700;margin:0;color:#8b5cf6">{{ savings_rate }}%</p>
+      <p style="font-size:.7rem;margin:5px 0 0;color:var(--fg);opacity:.45">of income retained</p>
+    </div>
+
+    {% if nw.investments > 0 %}
+    <!-- Portfolio Value -->
+    <div style="background:var(--panel);border-radius:8px;border-left:4px solid #06b6d4;padding:14px 18px;display:flex;justify-content:space-between;align-items:flex-start">
+      <div>
+        <p style="font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--fg);opacity:.5;margin:0 0 5px">Portfolio Value</p>
+        <p style="font-size:1.55rem;font-weight:700;margin:0;color:#06b6d4">${{ "{:,.0f}".format(nw.investments) }}</p>
+        <p style="font-size:.7rem;margin:5px 0 0;color:var(--fg);opacity:.45">manual holdings</p>
+      </div>
+      <a href="/investments" style="font-size:.72rem;color:#6366f1;font-weight:500;text-decoration:none;white-space:nowrap">Manage →</a>
+    </div>
+    {% endif %}
+
+  </div>
+  <p style="font-size:.68rem;color:var(--fg);opacity:.35;margin:-4px 0 0;text-align:right">vs. {{ prev_start }} – {{ prev_end }}</p>
+
+  <!-- ── Budget alerts (compact) ── -->
+  {% if budget_alerts %}
+  <div style="display:flex;flex-direction:column;gap:6px">
+    {% for alert in budget_alerts %}
+    <div class="dash-alert" style="display:flex;align-items:center;justify-content:space-between;padding:8px 14px;border-radius:8px;
+      border:1px solid {% if alert.level=='over' %}color-mix(in srgb,var(--red,#ef4444) 40%,var(--border)){% else %}color-mix(in srgb,#f59e0b 40%,var(--border)){% endif %};
+      background:{% if alert.level=='over' %}color-mix(in srgb,var(--red,#ef4444) 10%,var(--panel)){% else %}color-mix(in srgb,#f59e0b 10%,var(--panel)){% endif %}">
+      <span style="font-size:.8rem;font-weight:500;color:var(--fg)">
+        {% if alert.level=='over' %}🔴{% else %}🟡{% endif %}
+        &nbsp;<strong>{{ alert.category }}</strong>:
+        {% if alert.level=='over' %}over budget — ${{ "%.0f"|format(alert.monthly_avg) }}/mo avg / ${{ "%.0f"|format(alert.limit) }}/mo limit ({{ alert.pct }}%)
+        {% else %}{{ alert.pct }}% of monthly budget — ${{ "%.0f"|format(alert.monthly_avg) }}/mo avg / ${{ "%.0f"|format(alert.limit) }}/mo limit{% endif %}
+      </span>
+      <a href="{{ url_for('budgets') }}" style="font-size:.75rem;color:#6366f1;font-weight:500;text-decoration:none;white-space:nowrap;margin-left:12px">Manage →</a>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <!-- ── AI Insight + Spending Insights row ── -->
+  <div id="ai-insight-card" style="display:none;background:var(--panel);border-radius:8px;border-left:4px solid #8b5cf6;padding:12px 18px;display:none">
+    <p style="font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#8b5cf6;margin:0 0 5px">✦ AI Insight</p>
+    <p id="ai-insight-text" style="font-size:.82rem;color:var(--fg);line-height:1.55;margin:0"></p>
+  </div>
+
+  <!-- ── Main content: Category table + Insights ── -->
+  <div class="dash-cols" style="display:grid;grid-template-columns:1fr 320px;gap:1rem;align-items:start">
+
+    <!-- Category Breakdown (scrollable) -->
+    <div style="background:var(--panel);border-radius:8px;overflow:hidden;border:1px solid var(--border)">
+      <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+        <h3 style="font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--fg);margin:0">Category Breakdown</h3>
+        <a href="{{ url_for('budgets') }}" style="font-size:.75rem;color:#6366f1;text-decoration:none">Manage Budgets →</a>
+      </div>
+      <div class="dash-table-scroll" style="overflow-y:auto;max-height:360px">
+        <table style="width:100%;border-collapse:collapse;font-size:.8rem">
+          <thead>
+            <tr style="position:sticky;top:0;z-index:1;background:var(--panel)">
+              <th style="padding:8px 12px;text-align:left;font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--fg);opacity:.5;border-bottom:1px solid var(--border)">Category</th>
+              <th style="padding:8px 12px;text-align:right;font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--fg);opacity:.5;border-bottom:1px solid var(--border)">In</th>
+              <th style="padding:8px 12px;text-align:right;font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--fg);opacity:.5;border-bottom:1px solid var(--border)">Out</th>
+              <th style="padding:8px 12px;text-align:right;font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--fg);opacity:.5;border-bottom:1px solid var(--border)">Net</th>
+              <th style="padding:8px 12px;text-align:left;font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--fg);opacity:.5;border-bottom:1px solid var(--border)">Budget</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for category, stats in category_stats.items() %}
+            <tr style="border-bottom:1px solid var(--border)">
+              <td style="padding:7px 12px;font-weight:500;color:var(--fg)">{{ category }}</td>
+              <td style="padding:7px 12px;text-align:right">
+                <a href="{{ url_for('transactions',start_date=start_date,end_date=end_date,account=account_filter,category=category,type='inbound') }}"
+                  style="color:#22c55e;text-decoration:underline">${{ "%.0f"|format(stats.inbound) }}</a>
+              </td>
+              <td style="padding:7px 12px;text-align:right">
+                <a href="{{ url_for('transactions',start_date=start_date,end_date=end_date,account=account_filter,category=category,type='outgo') }}"
+                  style="color:var(--red,#ef4444);text-decoration:underline">${{ "%.0f"|format(stats.outbound) }}</a>
+              </td>
+              <td style="padding:7px 12px;text-align:right;font-weight:500;color:{% if stats.inbound-stats.outbound>=0 %}#22c55e{% else %}var(--red,#ef4444){% endif %}">
+                ${{ "%.0f"|format(stats.inbound-stats.outbound) }}
+              </td>
+              <td style="padding:7px 12px;min-width:130px">
+                {% if category in budget_map %}
+                  {% set lim=budget_map[category] %}
+                  {% set net_spent=([stats.outbound-stats.inbound,0]|max) %}
+                  {% set mo_avg=net_spent/period_months %}
+                  {% set pct=([((mo_avg/lim)*100)|round(0)|int,100]|min) %}
+                  {% set over=mo_avg>lim %}
+                  <div style="display:flex;align-items:center;gap:6px">
+                    <div style="flex:1;background:var(--border);border-radius:999px;height:5px;min-width:60px">
+                      <div style="width:{{ pct }}%;height:5px;border-radius:999px;background:{% if over %}var(--red,#ef4444){% elif pct>75 %}#f59e0b{% else %}#22c55e{% endif %}"></div>
+                    </div>
+                    <span style="font-size:.68rem;white-space:nowrap;color:{% if over %}var(--red,#ef4444){% else %}var(--fg){% endif %};opacity:.8">
+                      ${{ "%.0f"|format(mo_avg) }}/mo / ${{ "%.0f"|format(lim) }}/mo
+                    </span>
+                  </div>
+                {% else %}
+                  <a href="{{ url_for('budgets') }}" style="font-size:.7rem;color:var(--fg);opacity:.35;text-decoration:none">+ set budget</a>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Spending Insights sidebar -->
+    {% if insights %}
+    <div style="background:var(--panel);border-radius:8px;overflow:hidden;border:1px solid var(--border)">
+      <div style="padding:12px 16px;border-bottom:1px solid var(--border)">
+        <h3 style="font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--fg);margin:0">Spending Insights</h3>
+      </div>
+      <ul style="margin:0;padding:10px 14px 14px;list-style:none;display:flex;flex-direction:column;gap:8px">
+        {% for item in insights %}
+        <li style="display:flex;align-items:flex-start;gap:8px">
+          <span style="flex-shrink:0;width:16px;height:16px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.65rem;font-weight:700;margin-top:1px;
+            {% if item.positive==true %}background:color-mix(in srgb,#22c55e 15%,var(--panel));color:#22c55e
+            {% elif item.positive==false %}background:color-mix(in srgb,var(--red,#ef4444) 15%,var(--panel));color:var(--red,#ef4444)
+            {% else %}background:color-mix(in srgb,var(--fg) 10%,var(--panel));color:var(--fg){% endif %}">
+            {% if item.positive==true %}↓{% elif item.positive==false %}↑{% else %}●{% endif %}
+          </span>
+          <span style="font-size:.78rem;color:var(--fg);line-height:1.4">{{ item.text }}</span>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% else %}
+    <div style="background:var(--panel);border-radius:8px;border:1px solid var(--border);padding:24px 16px;display:flex;align-items:center;justify-content:center">
+      <p style="font-size:.8rem;color:var(--fg);opacity:.35;margin:0;text-align:center">No spending insights for this period</p>
+    </div>
+    {% endif %}
+
+  </div>
+
+  <!-- ── Chart row 1: Income+Outgo Trend | Category Spending Trend ── -->
+  <div class="dash-cols" style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+
+    <div style="background:var(--panel);border-radius:8px;border:1px solid var(--border);padding:14px 18px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin:0 0 12px">
+        <h3 style="font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--fg);opacity:.65;margin:0">Income &amp; Outgo Trend</h3>
+        <button onclick="openFocus('combinedTrendChart','Income &amp; Outgo Trend')" title="Expand" style="background:none;border:1px solid var(--border);border-radius:6px;padding:3px 6px;cursor:pointer;color:var(--fg);opacity:.5;display:flex;align-items:center;line-height:1" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=.5">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+        </button>
+      </div>
+      <div style="height:210px"><canvas id="combinedTrendChart"></canvas></div>
+    </div>
+
+    {% if category_trend.months %}
+    <div style="background:var(--panel);border-radius:8px;border:1px solid var(--border);padding:14px 18px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin:0 0 2px">
+        <h3 style="font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--fg);opacity:.65;margin:0">Category Spending Trend</h3>
+        <button onclick="openFocus('categoryTrendChart','Category Spending Trend')" title="Expand" style="background:none;border:1px solid var(--border);border-radius:6px;padding:3px 6px;cursor:pointer;color:var(--fg);opacity:.5;display:flex;align-items:center;line-height:1" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=.5">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+        </button>
+      </div>
+      <p style="font-size:.68rem;color:var(--fg);opacity:.4;margin:0 0 10px">{{ filter_label }}</p>
+      <div style="height:210px"><canvas id="categoryTrendChart"></canvas></div>
+    </div>
+    {% else %}
+    <div style="background:var(--panel);border-radius:8px;border:1px solid var(--border);padding:14px 18px;display:flex;align-items:center;justify-content:center">
+      <p style="font-size:.82rem;color:var(--fg);opacity:.35;margin:0">No category data for this period</p>
+    </div>
+    {% endif %}
+
+  </div>
+
+  <!-- ── Chart row 2: Running Balance | Donut charts ── -->
+  <div class="dash-cols" style="display:grid;grid-template-columns:3fr 2fr;gap:1rem">
+
+    <div style="background:var(--panel);border-radius:8px;border:1px solid var(--border);padding:14px 18px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin:0 0 12px">
+        <h3 style="font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--fg);opacity:.65;margin:0">Running Balance</h3>
+        <button onclick="openFocus('balanceChart','Running Balance')" title="Expand" style="background:none;border:1px solid var(--border);border-radius:6px;padding:3px 6px;cursor:pointer;color:var(--fg);opacity:.5;display:flex;align-items:center;line-height:1" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=.5">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+        </button>
+      </div>
+      <div style="height:210px"><canvas id="balanceChart"></canvas></div>
+    </div>
+
+    <div style="background:var(--panel);border-radius:8px;border:1px solid var(--border);padding:14px 18px;display:flex;flex-direction:column;gap:12px">
+      <div style="flex:1">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin:0 0 6px">
+          <h3 style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--fg);opacity:.65;margin:0">Income by Category</h3>
+          <button onclick="openFocus('incomeChart','Income by Category')" title="Expand" style="background:none;border:1px solid var(--border);border-radius:6px;padding:3px 6px;cursor:pointer;color:var(--fg);opacity:.5;display:flex;align-items:center;line-height:1" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=.5">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+          </button>
+        </div>
+        <div class="dash-donut" style="height:130px"><canvas id="incomeChart"></canvas></div>
+      </div>
+      <div style="height:1px;background:var(--border)"></div>
+      <div style="flex:1">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin:0 0 6px">
+          <h3 style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--fg);opacity:.65;margin:0">Outgo by Category</h3>
+          <button onclick="openFocus('outgoChart','Outgo by Category')" title="Expand" style="background:none;border:1px solid var(--border);border-radius:6px;padding:3px 6px;cursor:pointer;color:var(--fg);opacity:.5;display:flex;align-items:center;line-height:1" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=.5">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+          </button>
+        </div>
+        <div class="dash-donut" style="height:130px"><canvas id="outgoChart"></canvas></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── Budget vs. Actuals (only when budgets are set) ── -->
+  {% if budget_map %}
+  <div style="background:var(--panel);border-radius:8px;border:1px solid var(--border);padding:14px 18px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin:0 0 2px">
+      <h3 style="font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--fg);opacity:.65;margin:0">Budget vs. Actuals — Monthly Avg</h3>
+      <button onclick="openFocus('budgetChart','Budget vs. Actuals — Monthly Avg')" title="Expand" style="background:none;border:1px solid var(--border);border-radius:6px;padding:3px 6px;cursor:pointer;color:var(--fg);opacity:.5;display:flex;align-items:center;line-height:1" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=.5">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+      </button>
+    </div>
+    <p style="font-size:.68rem;color:var(--fg);opacity:.4;margin:0 0 10px">{{ filter_label }} · avg per month vs. monthly limit</p>
+    <div style="height:180px"><canvas id="budgetChart"></canvas></div>
+  </div>
+  {% endif %}
+
+  <!-- ── Focus Modal ── -->
+  <div id="focusOverlay" onclick="closeFocus()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9998;backdrop-filter:blur(2px)"></div>
+  <div id="focusModal" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9999;background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:20px 24px;width:min(90vw,960px);height:min(82vh,620px);display:none;flex-direction:column;gap:12px;box-shadow:0 24px 64px rgba(0,0,0,.35)">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-shrink:0">
+      <h2 id="focusTitle" style="font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--fg);opacity:.65;margin:0"></h2>
+      <button onclick="closeFocus()" title="Close (Esc)" style="background:none;border:1px solid var(--border);border-radius:6px;padding:4px 8px;cursor:pointer;color:var(--fg);font-size:.75rem;font-weight:600;line-height:1;opacity:.6" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=.6">✕ Close</button>
+    </div>
+    <div style="flex:1;min-height:0;position:relative">
+      <canvas id="focusCanvas" style="width:100%;height:100%"></canvas>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// Run immediately if DOM is ready (SPA navigation), or wait for the event on first load.
+(function _initDashboard() {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', _initDashboard);
+    return;
+  }
+
+  // Destroy any existing Chart.js instances on these canvases before recreating
+  ['combinedTrendChart','categoryTrendChart','balanceChart','incomeChart',
+   'outgoChart','budgetChart'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el && typeof Chart !== 'undefined' && Chart.getChart) {
+      var existing = Chart.getChart(el);
+      if (existing) existing.destroy();
+    }
+  });
+
+  var cs = getComputedStyle(document.documentElement);
+  var cssVar = function(v, fb) { var r = cs.getPropertyValue(v).trim(); return r || fb; };
+  var C = {
+    fg:     cssVar('--fg',     '#1f2937'),
+    panel:  cssVar('--panel',  '#ffffff'),
+    border: cssVar('--border', '#e5e7eb'),
+    red:    cssVar('--red',    '#ef4444')
+  };
+
+  var cur = function(v) {
+    return new Intl.NumberFormat('en-US', {style:'currency',currency:'USD',maximumFractionDigits:0}).format(v);
+  };
+
+  var tip = {
+    backgroundColor: C.panel,
+    titleColor: C.fg,
+    bodyColor: C.fg,
+    borderColor: C.border,
+    borderWidth: 1
+  };
+
+  var legLabels = { color: C.fg, boxWidth: 11, font: { size: 10 } };
+  var tickColor = { color: C.fg };
+
+  function xyScales(stacked) {
+    return {
+      x: { ticks: tickColor, grid: { color: C.border }, stacked: !!stacked },
+      y: { ticks: Object.assign({ callback: function(v){ return cur(v); } }, tickColor),
+           grid: { color: C.border }, beginAtZero: true, stacked: !!stacked }
+    };
+  }
+
+  // Store config builders for focus modal
+  window._dashChartBuilders = {};
+  function _createChart(id, buildFn) {
+    window._dashChartBuilders[id] = buildFn;
+    var el = document.getElementById(id);
+    if (!el) return null;
+    return new Chart(el, buildFn());
+  }
+
+  // ── Combined Income + Outgo trend ──
+  var incomeMonths = {{ monthly_income|tojson }};
+  var outgoMonths  = {{ monthly_outgo|tojson }};
+  _createChart('combinedTrendChart', function() {
+    return {
+      type: 'line',
+      data: {
+        labels: incomeMonths.map(function(d){ return d.month; }),
+        datasets: [
+          { label: 'Income', data: incomeMonths.map(function(d){ return d.total; }),
+            borderColor: '#22c55e', backgroundColor: 'rgba(34,197,94,0.07)',
+            fill: true, tension: 0.4, pointRadius: 2, borderWidth: 2 },
+          { label: 'Outgo', data: outgoMonths.map(function(d){ return d.total; }),
+            borderColor: C.red, backgroundColor: 'rgba(239,68,68,0.07)',
+            fill: true, tension: 0.4, pointRadius: 2, borderWidth: 2 }
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { labels: legLabels },
+          tooltip: Object.assign({ callbacks: { label: function(ctx){ return ctx.dataset.label+': '+cur(ctx.raw); } } }, tip)
+        },
+        scales: xyScales()
+      }
+    };
+  });
+
+  // ── Category Spending Trend ──
+  var trendData = {{ category_trend|tojson }};
+  if (trendData.months && trendData.months.length > 0) {
+    var pal = ['#6366f1','#22c55e','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#f97316','#ec4899'];
+    _createChart('categoryTrendChart', function() {
+      return {
+        type: 'bar',
+        data: {
+          labels: trendData.months,
+          datasets: Object.entries(trendData.series).map(function(e, i) {
+            return { label: e[0], data: e[1], backgroundColor: pal[i % pal.length] };
+          })
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: {
+            legend: { labels: legLabels },
+            tooltip: Object.assign({ callbacks: { label: function(ctx){ return ctx.dataset.label+': '+cur(ctx.raw); } } }, tip)
+          },
+          scales: xyScales(true)
+        }
+      };
+    });
+  }
+
+  // ── Running Balance ──
+  var balHist = {{ balance_history|tojson }};
+  if (balHist.length > 0) {
+    _createChart('balanceChart', function() {
+      return {
+        type: 'line',
+        data: {
+          labels: balHist.map(function(d){ return d.date; }),
+          datasets: [{
+            label: 'Balance', data: balHist.map(function(d){ return d.balance; }),
+            borderColor: '#6366f1', backgroundColor: 'rgba(99,102,241,0.07)',
+            fill: true, tension: 0.3, pointRadius: 0, borderWidth: 2
+          }]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: Object.assign({ callbacks: { label: function(ctx){ return cur(ctx.raw); } } }, tip)
+          },
+          scales: {
+            x: { ticks: Object.assign({ maxTicksLimit: 10 }, tickColor), grid: { color: C.border } },
+            y: { ticks: Object.assign({ callback: function(v){ return cur(v); } }, tickColor), grid: { color: C.border } }
+          }
+        }
+      };
+    });
+  }
+
+  // ── Income + Outgo donuts ──
+  var cats    = {{ category_stats.keys()|list|tojson }};
+  var inArr   = {{ category_stats.values()|map(attribute='inbound')|list|tojson }};
+  var outArr  = {{ category_stats.values()|map(attribute='outbound')|list|tojson }};
+  var greens  = ['#22c55e','#16a34a','#4ade80','#86efac','#15803d','#bbf7d0','#166534','#dcfce7'];
+  var reds    = ['#ef4444','#dc2626','#f87171','#fca5a5','#b91c1c','#fecaca','#7f1d1d','#fee2e2'];
+
+  function donutConfig(dataArr, palette) {
+    return {
+      type: 'doughnut',
+      data: { labels: cats, datasets: [{ data: dataArr, backgroundColor: palette, borderColor: C.panel, borderWidth: 1 }] },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { position: window.innerWidth < 640 ? 'bottom' : 'right', labels: { color: C.fg, boxWidth: 9, font: { size: 9 } } },
+          tooltip: Object.assign({ callbacks: { label: function(ctx){ return ctx.label+': '+cur(ctx.raw); } } }, tip)
+        }
+      }
+    };
+  }
+
+  _createChart('incomeChart', function() { return donutConfig(inArr, greens); });
+  _createChart('outgoChart',  function() { return donutConfig(outArr, reds); });
+
+  // ── Budget vs. Actuals ──
+  var bmap    = {{ budget_map|tojson }};
+  var catStat = {{ category_stats|tojson }};
+  var periodMonths = {{ period_months }};
+  var bcats   = Object.keys(bmap);
+  if (bcats.length > 0) {
+    var actuals = bcats.map(function(c){ var s=catStat[c]||{}; return Math.max(0,(s.outbound||0)-(s.inbound||0)) / periodMonths; });
+    var limits  = bcats.map(function(c){ return bmap[c]; });
+    var bColors = actuals.map(function(a,i){
+      return a > limits[i] ? 'rgba(239,68,68,0.8)' : a > limits[i]*0.8 ? 'rgba(234,179,8,0.8)' : 'rgba(99,102,241,0.8)';
+    });
+    _createChart('budgetChart', function() {
+      return {
+        type: 'bar',
+        data: {
+          labels: bcats,
+          datasets: [
+            { label: 'Actual', data: actuals, backgroundColor: bColors },
+            { label: 'Budget', data: limits, backgroundColor: 'rgba(156,163,175,0.25)', borderColor: C.border, borderWidth: 1 }
+          ]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: {
+            legend: { labels: legLabels },
+            tooltip: Object.assign({ callbacks: { label: function(ctx){ return ctx.dataset.label+': '+cur(ctx.raw); } } }, tip)
+          },
+          scales: xyScales()
+        }
+      };
+    });
+  }
+
+  // ── AI Insight (cached, loads async) ──
+  fetch('/api/dashboard-insight')
+    .then(function(r){ return r.json(); })
+    .then(function(data) {
+      if (data.insight) {
+        document.getElementById('ai-insight-text').textContent = data.insight;
+        document.getElementById('ai-insight-card').style.display = 'block';
+      }
+    })
+    .catch(function(){});
+})(); // _initDashboard
+
+// ── Focus modal ──
+var _focusChart = null;
+
+function openFocus(canvasId, title) {
+  var buildFn = window._dashChartBuilders && window._dashChartBuilders[canvasId];
+  if (!buildFn) return;
+
+  document.getElementById('focusTitle').textContent = title;
+
+  var overlay = document.getElementById('focusOverlay');
+  var modal   = document.getElementById('focusModal');
+  overlay.style.display = 'block';
+  modal.style.display   = 'flex';
+
+  // Destroy previous focus chart if any
+  if (_focusChart) { _focusChart.destroy(); _focusChart = null; }
+
+  // Rebuild canvas (replacing to clear any stale Chart state)
+  var container = document.getElementById('focusCanvas').parentNode;
+  var oldCanvas = document.getElementById('focusCanvas');
+  oldCanvas.parentNode.removeChild(oldCanvas);
+  var newCanvas = document.createElement('canvas');
+  newCanvas.id = 'focusCanvas';
+  newCanvas.style.cssText = 'width:100%;height:100%';
+  container.appendChild(newCanvas);
+
+  // Small delay so the modal layout is painted before Chart.js measures size
+  requestAnimationFrame(function() {
+    requestAnimationFrame(function() {
+      var cfg = buildFn();
+      // Adjust legend for larger view
+      if (cfg.options && cfg.options.plugins && cfg.options.plugins.legend) {
+        cfg.options.plugins.legend.labels = Object.assign({}, cfg.options.plugins.legend.labels, { font: { size: 12 }, boxWidth: 14 });
+      }
+      _focusChart = new Chart(newCanvas, cfg);
+    });
+  });
+
+  document.addEventListener('keydown', _focusEscListener);
+}
+
+function closeFocus() {
+  document.getElementById('focusOverlay').style.display = 'none';
+  document.getElementById('focusModal').style.display   = 'none';
+  if (_focusChart) { _focusChart.destroy(); _focusChart = null; }
+  document.removeEventListener('keydown', _focusEscListener);
+}
+
+function _focusEscListener(e) {
+  if (e.key === 'Escape') closeFocus();
+}
+</script>
+{% endblock %}

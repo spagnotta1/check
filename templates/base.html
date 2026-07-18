@@ -1,0 +1,827 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
+  <title>{% block title %}Checkbook App{% endblock %}</title>
+
+  <!-- ── Apply saved theme BEFORE any render (prevents flash of wrong theme) ── -->
+  <script>
+  (function(){
+    var LS = 'check-theme';
+    try {
+      var t = JSON.parse(localStorage.getItem(LS));
+      if (t && t.colors) {
+        var s = document.documentElement.style;
+        var c = t.colors;
+        s.setProperty('--bg',     c.bg);
+        s.setProperty('--fg',     c.fg);
+        s.setProperty('--panel',  c.panel);
+        s.setProperty('--border', c.border);
+        if (c.red) s.setProperty('--red', c.red);
+      }
+    } catch(e){}
+  })();
+  </script>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+  /* ═══════════════════════════════════════════════════════════════════════
+     Check App — Global Theme Variables & CSS Overrides
+     Themes mirror Odysseus's THEMES object. Switching any theme updates
+     --bg / --fg / --panel / --border / --red on :root; every themed
+     element reads from those variables.
+     ═══════════════════════════════════════════════════════════════════════ */
+
+  :root {
+    /* Default: neutral light (Check's original look) */
+    --bg:     #f3f4f6;
+    --fg:     #111827;
+    --panel:  #ffffff;
+    --border: #e5e7eb;
+    --red:    #7c3aed;   /* "accent" — violet for Check (red in Odysseus) */
+  }
+
+  /* ── Smooth transitions on theme switch ── */
+  body, nav, main, header, footer,
+  .bg-white, .bg-gray-50, .bg-gray-100,
+  input, textarea, select, button,
+  table, th, td { transition: background-color .28s ease, color .22s ease, border-color .2s ease !important; }
+  /* Don't animate canvas, images, or JS animations */
+  canvas, img, video, svg,
+  [style*="animation"], [class*="animate-"] { transition: none !important; }
+
+  /* ── Body ── */
+  body { background-color: var(--bg) !important; color: var(--fg) !important; }
+
+  /* ── Navigation ── */
+  nav                           { background-color: var(--panel) !important; }
+  nav .shadow-lg                { box-shadow: 0 1px 4px rgba(0,0,0,.18) !important; }
+
+  /* Brand title */
+  nav a.text-xl                 { color: var(--fg) !important; }
+
+  /* Nav links */
+  nav a.text-gray-500           { color: color-mix(in srgb, var(--fg) 55%, transparent) !important; }
+  nav a.hover\:text-gray-700:hover { color: var(--fg) !important; }
+  nav a.hover\:border-gray-300:hover { border-color: color-mix(in srgb, var(--border) 120%, var(--fg) 5%) !important; }
+
+  /* Active nav item (AI Chat link uses violet classes) */
+  nav a.text-violet-500,
+  nav a.text-violet-600         { color: var(--red) !important; }
+  nav a.border-violet-500       { border-color: var(--red) !important; }
+  nav a.hover\:border-violet-400:hover { border-color: color-mix(in srgb, var(--red) 70%, white) !important; }
+  nav a.hover\:text-violet-700:hover   { color: color-mix(in srgb, var(--red) 80%, black) !important; }
+
+  /* ── White / gray panels → theme panel ── */
+  .bg-white                     { background-color: var(--panel) !important; }
+  .bg-gray-50                   { background-color: color-mix(in srgb, var(--bg) 72%, var(--panel)) !important; }
+  .bg-gray-100                  { background-color: var(--bg) !important; }
+
+  /* ── Text ── */
+  .text-gray-900                { color: var(--fg) !important; }
+  .text-gray-800                { color: color-mix(in srgb, var(--fg) 88%, transparent) !important; }
+  .text-gray-700                { color: color-mix(in srgb, var(--fg) 76%, transparent) !important; }
+  .text-gray-600                { color: color-mix(in srgb, var(--fg) 63%, transparent) !important; }
+  .text-gray-500                { color: color-mix(in srgb, var(--fg) 50%, transparent) !important; }
+  .text-gray-400                { color: color-mix(in srgb, var(--fg) 38%, transparent) !important; }
+  .text-gray-300                { color: color-mix(in srgb, var(--fg) 28%, transparent) !important; }
+
+  /* ── Borders ── */
+  .border-gray-200              { border-color: var(--border) !important; }
+  .border-gray-300              { border-color: color-mix(in srgb, var(--border) 130%, var(--fg) 6%) !important; }
+  .divide-gray-200 > * + *     { border-color: var(--border) !important; }
+
+  /* ── Accent (violet → --red per theme) ── */
+  .text-violet-600, .text-violet-700 { color: var(--red) !important; }
+  .text-violet-500              { color: color-mix(in srgb, var(--red) 85%, white) !important; }
+  .text-violet-400, .text-violet-300 { color: color-mix(in srgb, var(--red) 65%, white) !important; }
+  .bg-violet-600                { background-color: var(--red) !important; }
+  .hover\:bg-violet-700:hover   { background-color: color-mix(in srgb, var(--red) 82%, black) !important; }
+  .border-violet-500, .border-violet-400 { border-color: var(--red) !important; }
+  .focus\:ring-violet-500:focus { box-shadow: 0 0 0 3px color-mix(in srgb, var(--red) 25%, transparent) !important; }
+
+  /* Green / positive values — keep as-is (financial data) */
+
+  /* ── Inputs / forms ── */
+  input[type="text"], input[type="number"], input[type="email"],
+  input[type="password"], input[type="date"], input[type="search"],
+  input[type="file"], textarea, select {
+    background-color: var(--panel) !important;
+    color: var(--fg) !important;
+    border-color: var(--border) !important;
+  }
+  input::placeholder, textarea::placeholder {
+    color: color-mix(in srgb, var(--fg) 33%, transparent) !important;
+  }
+  /* File input button */
+  input[type="file"]::file-selector-button {
+    background-color: color-mix(in srgb, var(--panel) 80%, var(--bg)) !important;
+    color: var(--fg) !important;
+    border-color: var(--border) !important;
+  }
+
+  /* ── Table ── */
+  th { background-color: color-mix(in srgb, var(--bg) 65%, var(--panel)) !important;
+       color: color-mix(in srgb, var(--fg) 72%, transparent) !important; }
+  tr { border-color: var(--border) !important; }
+  .hover\:bg-gray-50:hover { background-color: color-mix(in srgb, var(--bg) 60%, var(--panel)) !important; }
+
+  /* ── Badges / pills ── */
+  .bg-gray-200  { background-color: color-mix(in srgb, var(--border) 60%, var(--bg)) !important; }
+
+  /* ── Shadows (panel-aware) ── */
+  .shadow, .shadow-sm, .shadow-lg, .shadow-md {
+    --tw-shadow-color: rgba(0,0,0,.16);
+  }
+
+  /* ════════════════════════════════════════════════════════════════════
+     Theme Picker Panel
+     ════════════════════════════════════════════════════════════════════ */
+
+  #theme-panel {
+    position: fixed;
+    top: 64px;
+    right: 12px;
+    width: 340px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    box-shadow: 0 8px 40px rgba(0,0,0,.35);
+    z-index: 9999;
+    padding: 16px;
+    display: none;
+    animation: tp-enter .18s ease-out both;
+  }
+  #theme-panel.open { display: block; }
+  @keyframes tp-enter {
+    from { opacity:0; transform:translateY(-8px) scale(.97); }
+    to   { opacity:1; transform:translateY(0) scale(1); }
+  }
+
+  .tp-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+  }
+  .tp-title {
+    font-size: .78rem;
+    font-weight: 700;
+    font-family: ui-monospace, 'Courier New', monospace;
+    color: var(--fg);
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    opacity: .7;
+  }
+  .tp-close {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--fg);
+    opacity: .4;
+    font-size: 1.1rem;
+    line-height: 1;
+    padding: 2px 5px;
+    border-radius: 4px;
+    transition: opacity .15s, background .15s;
+  }
+  .tp-close:hover { opacity:.9; background: color-mix(in srgb, var(--fg) 10%, transparent); }
+
+  /* Theme swatch grid */
+  #theme-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+  }
+
+  .t-swatch {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 5px 3px;
+    border-radius: 9px;
+    transition: background .14s;
+  }
+  .t-swatch:hover { background: color-mix(in srgb, var(--fg) 7%, transparent); }
+
+  .t-swatch-preview {
+    width: 42px;
+    height: 42px;
+    border-radius: 9px;
+    border: 2px solid;
+    overflow: hidden;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    transition: box-shadow .15s;
+    position: relative;
+  }
+  .t-swatch.active .t-swatch-preview {
+    box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--red);
+  }
+
+  .t-sw-bg     { grid-column: 1 / -1; grid-row: 1; }
+  .t-sw-accent { grid-column: 1; grid-row: 2; }
+  .t-sw-fg     { grid-column: 2; grid-row: 2; opacity: .55; }
+
+  /* Active check */
+  .t-swatch.active .t-swatch-preview::after {
+    content: '✓';
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: .75rem;
+    font-weight: 800;
+    color: #fff;
+    text-shadow: 0 1px 3px rgba(0,0,0,.7);
+    background: rgba(0,0,0,.18);
+  }
+
+  .t-swatch-name {
+    font-size: .6rem;
+    font-family: ui-monospace, 'Courier New', monospace;
+    color: var(--fg);
+    opacity: .6;
+    text-align: center;
+    white-space: nowrap;
+  }
+
+  /* Theme button in nav */
+  #theme-btn {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    cursor: pointer;
+    color: color-mix(in srgb, var(--fg) 55%, transparent);
+    font-size: .72rem;
+    font-family: ui-monospace, 'Courier New', monospace;
+    padding: 4px 10px;
+    transition: color .15s, border-color .15s, background .15s;
+  }
+  #theme-btn:hover {
+    color: var(--fg);
+    border-color: color-mix(in srgb, var(--border) 140%, var(--fg) 10%);
+    background: color-mix(in srgb, var(--fg) 5%, transparent);
+  }
+  #theme-btn .theme-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: var(--red);
+    flex-shrink: 0;
+  }
+
+  /* ── Mobile "More" menu (bottom sheet on phones) ── */
+  #mobile-menu { background-color: var(--panel); }
+  #mobile-menu a:active { background: color-mix(in srgb, var(--fg) 8%, transparent); }
+
+  /* ── Bottom tab bar (phones only) ── */
+  #tab-bar { display: none; }
+
+  /* ── Small-screen fit (no effect on desktop) ── */
+  @media (max-width: 640px) {
+    * { -webkit-tap-highlight-color: transparent; }
+
+    /* 16px inputs stop iOS Safari/WebView from auto-zooming on focus */
+    input[type="text"], input[type="number"], input[type="email"],
+    input[type="password"], input[type="date"], input[type="search"],
+    select, textarea { font-size: 16px !important; }
+
+    #theme-panel {
+      right: 8px;
+      left: 8px;
+      width: auto;
+      max-width: none;
+    }
+    #toast-container {
+      left: 1rem;
+      right: 1rem;
+      max-width: none !important;
+      bottom: calc(68px + env(safe-area-inset-bottom)) !important;
+    }
+    /* Keep wide content scrollable instead of stretching the page */
+    main {
+      overflow-x: hidden;
+      /* room for the fixed tab bar (!important beats Tailwind's .py-6) */
+      padding-bottom: calc(84px + env(safe-area-inset-bottom)) !important;
+    }
+
+    /* Fixed bottom tab bar — primary nav within thumb reach */
+    #tab-bar {
+      display: flex;
+      position: fixed;
+      left: 0; right: 0; bottom: 0;
+      z-index: 9990;
+      background: var(--panel);
+      border-top: 1px solid var(--border);
+      padding-bottom: env(safe-area-inset-bottom);
+      box-shadow: 0 -2px 16px rgba(0,0,0,.10);
+    }
+    .tab-item {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      padding: 8px 0 6px;
+      min-height: 54px;
+      font-size: .62rem;
+      font-weight: 600;
+      letter-spacing: .02em;
+      color: color-mix(in srgb, var(--fg) 45%, transparent);
+      text-decoration: none;
+      background: none;
+      border: none;
+      cursor: pointer;
+    }
+    .tab-item.active { color: var(--red); }
+    .tab-item svg { flex-shrink: 0; }
+
+    /* While the keyboard is up, hide the tab bar (ChatGPT-style focused compose) */
+    html.kb-open #tab-bar { display: none; }
+    html.kb-open main { padding-bottom: 16px !important; }
+
+    /* "More" menu becomes a bottom sheet docked above the tab bar */
+    #mobile-menu {
+      position: fixed;
+      left: 0; right: 0;
+      bottom: calc(54px + env(safe-area-inset-bottom));
+      z-index: 9989;
+      border-radius: 16px 16px 0 0;
+      border-top: 1px solid var(--border);
+      box-shadow: 0 -8px 40px rgba(0,0,0,.28);
+      max-height: 60vh;
+      overflow-y: auto;
+    }
+    #mobile-menu a {
+      min-height: 44px;
+      display: flex;
+      align-items: center;
+    }
+  }
+
+  /* SPA transition bar */
+  #spa-bar { position:fixed;top:0;left:0;height:2px;background:var(--red);width:0;opacity:0;transition:width .2s ease,opacity .2s;z-index:9999;pointer-events:none }
+  @keyframes fadeSlideIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+  .spa-loaded { animation:fadeSlideIn .18s ease-out }
+  </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+<div id="spa-bar"></div>
+
+  <!-- ── Navigation ── -->
+  <nav class="bg-white shadow-lg">
+    <div class="max-w-7xl mx-auto px-4">
+      <div class="flex justify-between h-16">
+
+        <!-- Left: brand + nav links -->
+        <div class="flex">
+          <div class="flex-shrink-0 flex items-center">
+            <a href="/" class="text-xl font-bold text-gray-800">Checkbook App</a>
+          </div>
+          <div class="hidden sm:ml-6 sm:flex sm:space-x-8">
+            <a href="/" class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Dashboard</a>
+            <a href="/upload" class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Upload</a>
+            <a href="/transactions" class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Transactions</a>
+            <a href="/anomalies" class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Anomalies</a>
+            <a href="/recurring" class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Recurring</a>
+            <a href="/budgets" class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Budgets</a>
+            <a href="/rules" class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Rules</a>
+            <a href="/investments" class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Investments</a>
+            <a href="/connections" class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Connections</a>
+            <a href="/chat" class="border-transparent text-violet-500 hover:border-violet-400 hover:text-violet-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">AI Chat</a>
+          </div>
+        </div>
+
+        <!-- Right: theme switcher button -->
+        <div class="flex items-center gap-2">
+          <button id="theme-btn" onclick="toggleThemePanel()" title="Switch theme">
+            <div class="theme-dot"></div>
+            Theme
+          </button>
+        </div>
+
+      </div>
+    </div>
+
+  </nav>
+
+  <!-- More menu — bottom sheet on phones, hidden on sm+ -->
+  <div id="mobile-menu" class="sm:hidden hidden">
+    <div class="px-3 pt-3 pb-2">
+      <p class="px-3 pb-1 text-xs font-semibold uppercase tracking-wider text-gray-400">More</p>
+      <a href="/upload" class="block px-3 py-2 rounded-md text-base font-medium text-gray-500">Upload</a>
+      <a href="/investments" class="block px-3 py-2 rounded-md text-base font-medium text-gray-500">Investments</a>
+      <a href="/connections" class="block px-3 py-2 rounded-md text-base font-medium text-gray-500">Connections</a>
+      <a href="/sync-history" class="block px-3 py-2 rounded-md text-base font-medium text-gray-500">Sync History</a>
+      <a href="/anomalies" class="block px-3 py-2 rounded-md text-base font-medium text-gray-500">Anomalies</a>
+      <a href="/recurring" class="block px-3 py-2 rounded-md text-base font-medium text-gray-500">Recurring</a>
+      <a href="/rules" class="block px-3 py-2 rounded-md text-base font-medium text-gray-500">Rules</a>
+    </div>
+  </div>
+
+  <!-- ── Theme Picker Panel ── -->
+  <div id="theme-panel" role="dialog" aria-label="Theme picker">
+    <div class="tp-header">
+      <span class="tp-title">Theme</span>
+      <button class="tp-close" onclick="closeThemePanel()" title="Close">✕</button>
+    </div>
+    <div id="theme-grid"></div>
+  </div>
+
+  <main class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+    {% block content %}{% endblock %}
+  </main>
+
+  <!-- Bottom tab bar (phones only — CSS keeps it display:none on sm+) -->
+  <div id="tab-bar">
+    <a href="/" class="tab-item">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5"/></svg>
+      <span>Home</span>
+    </a>
+    <a href="/transactions" class="tab-item">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg>
+      <span>Activity</span>
+    </a>
+    <a href="/budgets" class="tab-item">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>
+      <span>Budgets</span>
+    </a>
+    <a href="/chat" class="tab-item">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+      <span>AI Chat</span>
+    </a>
+    <button class="tab-item" id="tab-more" onclick="toggleMobileMenu()" aria-label="More pages">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>
+      <span>More</span>
+    </button>
+  </div>
+
+  <!-- Toast container -->
+  <div id="toast-container" class="fixed bottom-4 right-4 z-50 flex flex-col space-y-2 pointer-events-none" style="max-width:20rem"></div>
+
+  <script>
+  /* ═══════════════════════════════════════════════════════════════════════
+     THEME SYSTEM  (mirrors Odysseus's THEMES object exactly)
+     ═══════════════════════════════════════════════════════════════════════ */
+  var THEMES = {
+    'default':   { bg:'#f3f4f6', fg:'#111827', panel:'#ffffff', border:'#e5e7eb', red:'#7c3aed', label:'Default'   },
+    'dark':      { bg:'#282c34', fg:'#9cdef2', panel:'#111111', border:'#355a66', red:'#e06c75', label:'Dark'       },
+    'midnight':  { bg:'#0d1117', fg:'#c9d1d9', panel:'#161b22', border:'#30363d', red:'#f85149', label:'Midnight'   },
+    'light':     { bg:'#f0ebe3', fg:'#5a5248', panel:'#faf6f0', border:'#d4cdc2', red:'#c47d5a', label:'Light'      },
+    'paper':     { bg:'#faf8f5', fg:'#3b3836', panel:'#ffffff', border:'#d5d0c8', red:'#c5ac4a', label:'Paper'      },
+    'cyberpunk': { bg:'#0a0a0f', fg:'#0ff0fc', panel:'#12101a', border:'#9b30ff', red:'#e040fb', label:'Cyberpunk'  },
+    'retrowave': { bg:'#1a1a2e', fg:'#e94560', panel:'#16213e', border:'#533483', red:'#e94560', label:'Retrowave'  },
+    'forest':    { bg:'#1b2a1b', fg:'#a8d5a2', panel:'#142414', border:'#3d6b3d', red:'#7cb871', label:'Forest'     },
+    'ocean':     { bg:'#0b1a2c', fg:'#64d2ff', panel:'#091422', border:'#1e5074', red:'#4facfe', label:'Ocean'      },
+    'ume':       { bg:'#2b1b2e', fg:'#f5c2e7', panel:'#1e1420', border:'#6c4675', red:'#f5a0c0', label:'Ume'        },
+    'copper':    { bg:'#1c1410', fg:'#e8c39e', panel:'#140f0a', border:'#7a5533', red:'#d4764e', label:'Copper'     },
+    'terminal':  { bg:'#000000', fg:'#00ff41', panel:'#0a0a0a', border:'#003b00', red:'#00ff41', label:'Terminal'   },
+    'organs':    { bg:'#0a0406', fg:'#efe1c8', panel:'#15080a', border:'#3a1519', red:'#c83240', label:'Organs'     },
+    'lavender':  { bg:'#f3eef8', fg:'#3d3551', panel:'#faf7ff', border:'#cec3de', red:'#9b6dcc', label:'Lavender'   },
+    'gpt':       { bg:'#212121', fg:'#ececec', panel:'#171717', border:'#424242', red:'#949494', label:'GPT'        },
+    'claude':    { bg:'#262624', fg:'#f5f4f0', panel:'#30302e', border:'#4a4a47', red:'#c6613f', label:'Claude'     },
+    'cute':      { bg:'#fff0f5', fg:'#d4608a', panel:'#fff8fa', border:'#f0c0d0', red:'#ff6b9d', label:'Cute'       }
+  };
+
+  var LS_KEY = 'check-theme';
+  var _activeTheme = 'default';
+
+  /* ── Apply a theme by key ── */
+  function applyTheme(key) {
+    var t = THEMES[key];
+    if (!t) return;
+    _activeTheme = key;
+
+    var s = document.documentElement.style;
+    s.setProperty('--bg',     t.bg);
+    s.setProperty('--fg',     t.fg);
+    s.setProperty('--panel',  t.panel);
+    s.setProperty('--border', t.border);
+    s.setProperty('--red',    t.red);
+
+    // Persist to localStorage
+    try { localStorage.setItem(LS_KEY, JSON.stringify({ name: key, colors: t })); } catch(e){}
+
+    // Update theme dot in button
+    var dot = document.querySelector('#theme-btn .theme-dot');
+    if (dot) dot.style.background = t.red;
+
+    // Highlight active swatch
+    highlightActiveTheme();
+  }
+
+  /* ── Highlight the active swatch in the picker ── */
+  function highlightActiveTheme() {
+    document.querySelectorAll('.t-swatch').forEach(function(b) {
+      b.classList.toggle('active', b.dataset.key === _activeTheme);
+    });
+  }
+
+  /* ── Build swatch grid ── */
+  function buildThemeGrid() {
+    var grid = document.getElementById('theme-grid');
+    if (!grid || grid.childElementCount > 0) return; // already built
+    Object.keys(THEMES).forEach(function(key) {
+      var t = THEMES[key];
+      var btn = document.createElement('button');
+      btn.className = 't-swatch';
+      btn.dataset.key = key;
+      btn.title = t.label;
+      btn.innerHTML =
+        '<div class="t-swatch-preview" style="background:' + t.bg + '; border-color:' + t.border + '">' +
+          '<div class="t-sw-bg" style="background:' + t.bg + '"></div>' +
+          '<div class="t-sw-accent" style="background:' + t.red + '"></div>' +
+          '<div class="t-sw-fg" style="background:' + t.fg + '"></div>' +
+        '</div>' +
+        '<span class="t-swatch-name">' + t.label + '</span>';
+      btn.addEventListener('click', function() { applyTheme(key); });
+      grid.appendChild(btn);
+    });
+  }
+
+  /* ── Panel toggle ── */
+  function toggleThemePanel() {
+    var panel = document.getElementById('theme-panel');
+    if (!panel) return;
+    var isOpen = panel.classList.contains('open');
+    if (isOpen) {
+      closeThemePanel();
+    } else {
+      buildThemeGrid();
+      panel.classList.add('open');
+      highlightActiveTheme();
+    }
+  }
+  function closeThemePanel() {
+    var panel = document.getElementById('theme-panel');
+    if (panel) panel.classList.remove('open');
+  }
+
+  /* ── Mobile menu toggle ── */
+  function toggleMobileMenu() {
+    var menu = document.getElementById('mobile-menu');
+    if (menu) menu.classList.toggle('hidden');
+  }
+  function closeMobileMenu() {
+    var menu = document.getElementById('mobile-menu');
+    if (menu) menu.classList.add('hidden');
+  }
+  document.addEventListener('click', function(e) {
+    var menu = document.getElementById('mobile-menu');
+    if (!menu || menu.classList.contains('hidden')) return;
+    // Close after tapping a link, or when tapping outside the sheet
+    // (ignore the More tab button — its own onclick handles the toggle)
+    if (e.target.closest('#tab-more')) return;
+    if (e.target.closest('#mobile-menu a') || !e.target.closest('#mobile-menu')) closeMobileMenu();
+  });
+
+  /* Close panel when clicking outside */
+  document.addEventListener('click', function(e) {
+    var panel = document.getElementById('theme-panel');
+    var btn   = document.getElementById('theme-btn');
+    if (!panel || !panel.classList.contains('open')) return;
+    if (!panel.contains(e.target) && !btn.contains(e.target)) closeThemePanel();
+  });
+
+  /* ── Restore saved theme on page load ── */
+  (function() {
+    try {
+      var saved = JSON.parse(localStorage.getItem(LS_KEY));
+      if (saved && saved.name && THEMES[saved.name]) {
+        _activeTheme = saved.name;
+        // CSS vars already applied by the inline init script in <head>;
+        // just update the button dot color here.
+        var dot = document.querySelector('#theme-btn .theme-dot');
+        if (dot) dot.style.background = THEMES[saved.name].red;
+      }
+    } catch(e){}
+  })();
+
+
+  /* ═══════════════════════════════════════════════════════════════════════
+     TOAST SYSTEM
+     ═══════════════════════════════════════════════════════════════════════ */
+  function showToast(message, type) {
+    type = type || 'info';
+    var bg = { success:'bg-green-600', error:'bg-red-600', info:'bg-blue-600', warning:'bg-yellow-500' };
+    var container = document.getElementById('toast-container');
+    var toast = document.createElement('div');
+    toast.className = 'pointer-events-auto flex items-center justify-between gap-3 px-4 py-3 rounded-lg shadow-lg text-white text-sm font-medium transition-all duration-300 opacity-0 translate-x-8 ' + (bg[type] || bg.info);
+    toast.innerHTML = '<span class="flex-1">' + message + '</span><button onclick="dismissToast(this.parentElement)" class="shrink-0 text-white/70 hover:text-white text-xl leading-none">&times;</button>';
+    container.appendChild(toast);
+    requestAnimationFrame(function() { requestAnimationFrame(function() { toast.classList.remove('opacity-0','translate-x-8'); }); });
+    setTimeout(function() { dismissToast(toast); }, 5000);
+  }
+  function dismissToast(toast) {
+    if (!toast || !toast.parentElement) return;
+    toast.classList.add('opacity-0','translate-x-8');
+    setTimeout(function() { toast.remove(); }, 300);
+  }
+
+
+  /* ═══════════════════════════════════════════════════════════════════════
+     KEYBOARD SHORTCUTS
+     ═══════════════════════════════════════════════════════════════════════ */
+  document.addEventListener('keydown', function(e) {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    var target = e.target || document.activeElement;
+    if (!target) return;
+    var tag = target.tagName;
+    if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA' || target.isContentEditable) return;
+    if (e.key === 'D') { spaNavigate('/'); }
+    else if (e.key === 'T') { spaNavigate('/transactions'); }
+    else if (e.key === 'U') { spaNavigate('/upload'); }
+    else if (e.key === 'I') { spaNavigate('/investments'); }
+    else if (e.key === 'C') { spaNavigate('/chat'); }
+    else if (e.key === 'Escape') { closeThemePanel(); }
+    else if (e.key === '/') {
+      e.preventDefault();
+      var s = document.getElementById('search');
+      if (s) { s.focus(); s.select(); }
+    }
+  });
+
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+  document.addEventListener('DOMContentLoaded', function() {
+    {% for category, message in messages %}
+    showToast({{ message|tojson }}, {{ ('error' if category == 'error' else 'success' if category == 'success' else 'warning' if category == 'warning' else 'info')|tojson }});
+    {% endfor %}
+  });
+  {% endif %}
+  {% endwith %}
+
+
+  /* ═══════════════════════════════════════════════════════════════════════
+     SPA NAVIGATION
+     ═══════════════════════════════════════════════════════════════════════ */
+  var _spaBar = document.getElementById('spa-bar');
+  var _spaTimer = [];
+
+  function _barStart() {
+    _spaTimer.forEach(clearTimeout); _spaTimer = [];
+    _spaBar.style.opacity = '1'; _spaBar.style.width = '30%';
+    _spaTimer.push(setTimeout(function(){ _spaBar.style.width = '65%'; }, 120));
+    _spaTimer.push(setTimeout(function(){ _spaBar.style.width = '85%'; }, 350));
+  }
+  function _barDone() {
+    _spaTimer.forEach(clearTimeout);
+    _spaBar.style.width = '100%';
+    setTimeout(function(){ _spaBar.style.opacity = '0'; _spaBar.style.width = '0'; }, 220);
+  }
+
+  var _navPaths = ['/', '/upload', '/transactions', '/anomalies', '/recurring',
+                   '/budgets', '/rules', '/investments', '/connections',
+                   '/sync-history', '/chat'];
+
+  function _isSpaLink(href) {
+    if (!href || href.startsWith('#') || href.startsWith('http') ||
+        href.startsWith('mailto') || href.startsWith('javascript')) return false;
+    var path = href.split('?')[0].split('#')[0];
+    return _navPaths.some(function(p){ return p === path; });
+  }
+
+  function _updateNav(url) {
+    var path = url.split('?')[0];
+    document.querySelectorAll('nav a').forEach(function(a) {
+      var h = a.getAttribute('href');
+      var active = h === path || (h !== '/' && path.startsWith(h));
+      a.classList.toggle('text-violet-600',   active);
+      a.classList.toggle('border-violet-500', active);
+      a.classList.toggle('text-gray-500',    !active);
+      a.classList.toggle('border-transparent',!active);
+    });
+    document.querySelectorAll('#tab-bar a').forEach(function(a) {
+      var h = a.getAttribute('href');
+      a.classList.toggle('active', h === path || (h !== '/' && path.startsWith(h)));
+    });
+  }
+
+  function spaNavigate(url, push) {
+    closeThemePanel();
+    closeMobileMenu();
+    // Let the current page clean up before we tear down its DOM
+    // (e.g. chat page aborts any in-progress stream)
+    if (typeof window.__spaBeforeLeave === 'function') {
+      try { window.__spaBeforeLeave(); } catch(e) {}
+      window.__spaBeforeLeave = null;
+    }
+    _barStart();
+    fetch(url)
+      .then(function(r) { return r.text(); })
+      .then(function(html) {
+        var curMain;
+        try {
+          var doc = new DOMParser().parseFromString(html, 'text/html');
+          var newMain = doc.querySelector('main');
+          curMain = document.querySelector('main');
+          if (!newMain || !curMain) { window.location.href = url; return; }
+
+          curMain.querySelectorAll('canvas').forEach(function(c) {
+            try {
+              if (typeof Chart !== 'undefined' && typeof Chart.getChart === 'function') {
+                var ch = Chart.getChart(c); if (ch) ch.destroy();
+              }
+            } catch(e){}
+          });
+
+          curMain.innerHTML = newMain.innerHTML;
+          curMain.classList.remove('spa-loaded');
+          void curMain.offsetWidth;
+          curMain.classList.add('spa-loaded');
+
+          document.title = doc.title;
+          if (push !== false) history.pushState({url: url}, '', url);
+          _updateNav(url);
+          window.scrollTo(0, 0);
+        } catch(e) { window.location.href = url; _barDone(); return; }
+        // Sequentially execute scripts — handles external src, text/babel+src, and inline
+        (function _rx(scripts, i) {
+          if (i >= scripts.length) {
+            if (typeof Alpine !== 'undefined') { try { Alpine.initTree(curMain); } catch(e){} }
+            _barDone(); return;
+          }
+          var old = scripts[i], isBabel = old.type === 'text/babel', hasSrc = !!old.src;
+          if (hasSrc && isBabel) {
+            fetch(old.src).then(function(r){ return r.text(); }).then(function(src){
+              try {
+                var code = typeof Babel !== 'undefined' ? Babel.transform(src, {presets:['react']}).code : src;
+                var s = document.createElement('script'); s.textContent = code;
+                old.parentNode.replaceChild(s, old);
+              } catch(ex){}
+              _rx(scripts, i + 1);
+            }).catch(function(){ _rx(scripts, i + 1); });
+          } else if (hasSrc) {
+            var s = document.createElement('script');
+            Array.from(old.attributes).forEach(function(a){ s.setAttribute(a.name, a.value); });
+            s.onload = s.onerror = function(){ _rx(scripts, i + 1); };
+            old.parentNode.replaceChild(s, old);
+          } else if (isBabel) {
+            try {
+              var code = typeof Babel !== 'undefined' ? Babel.transform(old.textContent, {presets:['react']}).code : old.textContent;
+              var s = document.createElement('script'); s.textContent = code;
+              old.parentNode.replaceChild(s, old);
+            } catch(ex){}
+            _rx(scripts, i + 1);
+          } else {
+            var s = document.createElement('script'); s.textContent = old.textContent;
+            old.parentNode.replaceChild(s, old);
+            _rx(scripts, i + 1);
+          }
+        })(Array.from(curMain.querySelectorAll('script')), 0);
+      })
+      .catch(function() { window.location.href = url; });
+  }
+
+  document.addEventListener('click', function(e) {
+    var link = e.target.closest('a[href]');
+    if (!link || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    var href = link.getAttribute('href');
+    if (!_isSpaLink(href)) return;
+    e.preventDefault();
+    if (href !== window.location.pathname) spaNavigate(href);
+  });
+
+  window.addEventListener('popstate', function(e) {
+    spaNavigate(location.pathname + location.search, false);
+  });
+
+  history.replaceState({url: location.pathname}, '', location.pathname);
+  _updateNav(location.pathname);
+
+  /* ═══════════════════════════════════════════════════════════════════════
+     ON-SCREEN KEYBOARD TRACKING (phones)
+     Publishes the keyboard height as --kb and toggles html.kb-open so
+     pages can keep their input pinned above the keyboard.
+     ═══════════════════════════════════════════════════════════════════════ */
+  if (window.visualViewport) {
+    (function() {
+      var vv = window.visualViewport;
+      function _kbUpdate() {
+        var kb = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+        document.documentElement.style.setProperty('--kb', kb + 'px');
+        document.documentElement.classList.toggle('kb-open', kb > 60);
+      }
+      vv.addEventListener('resize', _kbUpdate);
+      vv.addEventListener('scroll', _kbUpdate);
+      _kbUpdate();
+    })();
+  }
+  </script>
+</body>
+</html>

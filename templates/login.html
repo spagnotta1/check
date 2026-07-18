@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign in - Checkbook App</title>
+  <style>
+    body {
+      margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      background: #f3f4f6; color: #111827;
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+    .card {
+      background: #fff; border: 1px solid #e5e7eb; border-radius: 14px;
+      box-shadow: 0 4px 24px rgba(0,0,0,.08); padding: 32px; width: 320px;
+    }
+    h1 { font-size: 1.15rem; margin: 0 0 4px; }
+    p  { font-size: .8rem; color: #6b7280; margin: 0 0 20px; }
+    input[type="password"] {
+      width: 100%; box-sizing: border-box; padding: 10px 12px; font-size: 16px;
+      border: 1px solid #d1d5db; border-radius: 8px; margin-bottom: 12px;
+    }
+    input[type="password"]:focus { outline: none; border-color: #7c3aed; box-shadow: 0 0 0 3px rgba(124,58,237,.18); }
+    button {
+      width: 100%; padding: 10px; font-size: .9rem; font-weight: 600; color: #fff;
+      background: #7c3aed; border: none; border-radius: 8px; cursor: pointer;
+    }
+    button:hover { background: #6d28d9; }
+    .error { font-size: .8rem; color: #dc2626; margin: 0 0 12px; }
+  </style>
+</head>
+<body>
+  <form class="card" method="post">
+    <h1>Checkbook App</h1>
+    <p>Enter the app password to continue.</p>
+    {% if error %}<p class="error">{{ error }}</p>{% endif %}
+    <input type="password" name="password" placeholder="Password" autofocus autocomplete="current-password">
+    <button type="submit">Sign in</button>
+  </form>
+</body>
+</html>

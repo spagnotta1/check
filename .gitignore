@@ -1,0 +1,26 @@
+# Secrets
+.env
+.sync_encryption_key
+.dev-cert.pem
+.dev-key.pem
+.flask_secret_key
+
+# Databases
+*.db
+*.db.pre-sync-backup
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Node
+node_modules/
+.expo/
+
+# Uploads / local data
+uploads/
+
+# Editors / OS
+.claude/
+.DS_Store

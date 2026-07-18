@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+
+{% block title %}Budgets - Checkbook App{% endblock %}
+
+{% block content %}
+<style>
+/* Mobile-only layout — no effect ≥640px */
+@media (max-width: 640px) {
+  #budgetTable, #budgetTable tbody { display: block; min-width: 0 !important; }
+  #budgetTable thead { display: none; }
+  #budgetTable tbody tr {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    column-gap: 10px; row-gap: 2px;
+    padding: 12px 4px;
+    border-bottom: 1px solid var(--border);
+  }
+  #budgetTable td { display: block; padding: 0 !important; border: none !important; white-space: normal !important; }
+  #budgetTable td:nth-child(1) { grid-column: 1; grid-row: 1; font-weight: 600; }        /* category */
+  #budgetTable td:nth-child(3) { grid-column: 2; grid-row: 1; text-align: right; font-size: .95rem; font-weight: 600; } /* limit */
+  #budgetTable td:nth-child(2) { grid-column: 1; grid-row: 2; font-size: .72rem; opacity: .6; } /* account */
+  #budgetTable td:nth-child(4) { grid-column: 2; grid-row: 2; text-align: right; }        /* actions */
+  #budgetTable td:nth-child(4) button { padding: 6px 4px; }
+  /* Inline edit rows keep their single full-width cell */
+  #budgetTable tr[id^="edit-"] td { grid-column: 1 / -1; }
+  #budgetTable tr[id^="edit-"] form { flex-wrap: wrap; row-gap: 8px; }
+  #budgetTable tr[id^="edit-"] input[name="monthly_limit"] { width: 100%; }
+  #budgetTable tr[id^="edit-"] select { flex: 1 1 100%; }
+}
+</style>
+<div class="space-y-6">
+    <!-- Add / Update form -->
+    <div class="bg-white shadow sm:rounded-lg px-4 py-5 sm:p-6">
+        <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">Add / Update Budget</h3>
+        <form method="POST" class="sm:flex sm:space-x-4 space-y-4 sm:space-y-0 items-end">
+            <input type="hidden" name="action" value="add">
+            <div class="flex-1">
+                <label class="block text-sm font-medium text-gray-700">Category</label>
+                <select name="category" required class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
+                    <option value="">-- select --</option>
+                    {% for cat in categories %}
+                    <option value="{{ cat }}">{{ cat }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex-1">
+                <label class="block text-sm font-medium text-gray-700">Account</label>
+                <select name="account_name" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
+                    <option value="both">Both</option>
+                    {% for acct in accounts %}
+                    <option value="{{ acct }}">{{ acct }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex-1">
+                <label class="block text-sm font-medium text-gray-700">Monthly Limit ($)</label>
+                <input type="number" name="monthly_limit" min="0" step="0.01" required placeholder="e.g. 500.00"
+                       class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+            </div>
+            <div>
+                <button type="submit" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700">
+                    Save Budget
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Current budgets -->
+    <div class="bg-white shadow sm:rounded-lg">
+        <div class="px-4 py-5 sm:p-6">
+            <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">Current Budgets</h3>
+            {% if budgets %}
+            <div class="overflow-x-auto">
+            <table id="budgetTable" class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Account</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Monthly Limit</th>
+                        <th class="px-6 py-3"></th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for budget in budgets %}
+                    <!-- Display row -->
+                    <tr id="display-{{ budget.id }}">
+                        <td class="px-6 py-4 text-sm font-medium text-gray-900">{{ budget.category }}</td>
+                        <td class="px-6 py-4 text-sm text-gray-500">{{ budget.account_name }}</td>
+                        <td class="px-6 py-4 text-sm text-gray-900">${{ "%.2f"|format(budget.monthly_limit) }}</td>
+                        <td class="px-6 py-4 text-right space-x-3">
+                            <button onclick="startEdit({{ budget.id }})" class="text-indigo-600 hover:text-indigo-800 text-sm font-medium">Edit</button>
+                            <form method="POST" class="inline">
+                                <input type="hidden" name="action" value="delete">
+                                <input type="hidden" name="budget_id" value="{{ budget.id }}">
+                                <button type="submit" class="text-red-600 hover:text-red-800 text-sm font-medium"
+                                        onclick="return confirm('Delete this budget?')">Delete</button>
+                            </form>
+                        </td>
+                    </tr>
+                    <!-- Inline edit row (hidden by default) -->
+                    <tr id="edit-{{ budget.id }}" class="hidden bg-indigo-50">
+                        <td class="px-6 py-3" colspan="4">
+                            <form method="POST" class="flex items-center space-x-3">
+                                <input type="hidden" name="action" value="add">
+                                <input type="hidden" name="category" value="{{ budget.category }}">
+                                <span class="text-sm font-medium text-gray-700 min-w-max">{{ budget.category }}</span>
+                                <select name="account_name" class="border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-sm">
+                                    <option value="both" {% if budget.account_name == 'both' %}selected{% endif %}>Both</option>
+                                    {% for acct in accounts %}
+                                    <option value="{{ acct }}" {% if budget.account_name == acct %}selected{% endif %}>{{ acct }}</option>
+                                    {% endfor %}
+                                </select>
+                                <input type="number" name="monthly_limit" min="0" step="0.01"
+                                       value="{{ "%.2f"|format(budget.monthly_limit) }}"
+                                       class="w-32 border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-sm">
+                                <button type="submit" class="px-3 py-1.5 text-sm font-medium text-white bg-indigo-600 rounded hover:bg-indigo-700">Save</button>
+                                <button type="button" onclick="cancelEdit({{ budget.id }})" class="px-3 py-1.5 text-sm font-medium text-gray-600 border border-gray-300 rounded hover:bg-gray-50">Cancel</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            </div>
+            {% else %}
+            <p class="text-sm text-gray-500">No budgets set yet. Add one above to start tracking spending limits.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+function startEdit(id) {
+    document.getElementById('display-' + id).classList.add('hidden');
+    document.getElementById('edit-' + id).classList.remove('hidden');
+}
+function cancelEdit(id) {
+    document.getElementById('edit-' + id).classList.add('hidden');
+    document.getElementById('display-' + id).classList.remove('hidden');
+}
+</script>
+{% endblock %}

@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+
+{% block title %}Anomalies - Checkbook App{% endblock %}
+
+{% block content %}
+<style>
+/* Mobile-only layout — no effect ≥640px */
+@media (max-width: 640px) {
+  #anomTable, #anomTable tbody { display: block; min-width: 0 !important; }
+  #anomTable thead { display: none; }
+  #anomTable tbody tr {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    column-gap: 10px; row-gap: 2px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  #anomTable td { display: block; padding: 0 !important; border: none !important; white-space: normal !important; }
+  #anomTable td[colspan] { grid-column: 1 / -1; padding: 24px 0 !important; }
+  #anomTable td:nth-child(1) { display: none; }                                   /* id */
+  #anomTable td:nth-child(3) { grid-column: 1; grid-row: 1; font-weight: 600; max-width: none !important; overflow: hidden; text-overflow: ellipsis; white-space: nowrap !important; }
+  #anomTable td:nth-child(4) { grid-column: 2; grid-row: 1; text-align: right; font-size: .95rem; }
+  #anomTable td:nth-child(2) { grid-column: 1; grid-row: 2; font-size: .72rem; opacity: .6; }
+  #anomTable td:nth-child(5) { grid-column: 2; grid-row: 2; text-align: right; font-size: .72rem; opacity: .6; }
+  #anomTable td:nth-child(6) { grid-column: 1 / -1; grid-row: 3; margin-top: 8px; text-align: right; }
+  #anomTable td:nth-child(6) button { padding: 8px 14px; font-size: .8rem; }
+
+  /* Pagination fits the screen */
+  .anom-pager { flex-wrap: wrap; gap: 10px; }
+  .anom-pager nav { overflow-x: auto; max-width: 100%; }
+}
+</style>
+<div class="space-y-6">
+    <div class="bg-white shadow sm:rounded-lg">
+        <div class="px-4 py-5 sm:px-6">
+            <div class="flex flex-wrap items-center justify-between gap-4">
+                <div>
+                    <h2 class="text-xl font-semibold text-gray-800">Anomaly Detection</h2>
+                    <p class="text-sm text-gray-500 mt-1">Transactions flagged as statistically unusual by amount, day of week, and day of month.</p>
+                </div>
+                <div class="flex items-center gap-3 flex-wrap">
+                    <form action="{{ url_for('anomalies') }}" method="get" class="flex items-center gap-2">
+                        {% if show_reviewed %}
+                        <input type="hidden" name="show_reviewed" value="1">
+                        {% endif %}
+                        <input type="hidden" name="sort" value="{{ sort_by }}">
+                        <input type="text" name="search_id" placeholder="Search by ID"
+                               class="rounded-md border-gray-300 shadow-sm text-sm focus:ring-indigo-500 focus:border-indigo-500 px-3 py-2 w-36">
+                        <button type="submit" class="px-3 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700">Search</button>
+                    </form>
+                    <a href="{{ url_for('anomalies', show_reviewed=('0' if show_reviewed else '1'), sort=sort_by) }}"
+                       class="px-3 py-2 text-sm font-medium border border-gray-300 rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                        {% if show_reviewed %}Hide Reviewed{% else %}Show Reviewed{% endif %}
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div class="border-t border-gray-200 overflow-x-auto">
+            <table id="anomTable" class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        {% set cols = [('id','ID'),('date','Date'),('description','Description'),('amount','Amount'),('category','Category')] %}
+                        {% for key, label in cols %}
+                        {% set asc_key = key + '_asc' %}
+                        {% set desc_key = key + '_desc' %}
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            <div class="flex items-center space-x-1">
+                                <span>{{ label }}</span>
+                                <a href="{{ url_for('anomalies', sort=asc_key, show_reviewed=('1' if show_reviewed else '0')) }}"
+                                   class="{{ 'text-indigo-600' if sort_by == asc_key else 'text-gray-400' }} hover:text-indigo-800">&#x25B2;</a>
+                                <a href="{{ url_for('anomalies', sort=desc_key, show_reviewed=('1' if show_reviewed else '0')) }}"
+                                   class="{{ 'text-indigo-600' if sort_by == desc_key else 'text-gray-400' }} hover:text-indigo-800">&#x25BC;</a>
+                            </div>
+                        </th>
+                        {% endfor %}
+                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200" id="anomalyBody">
+                    {% for anomaly in anomalies.items %}
+                    <tr id="arow-{{ anomaly.id }}" class="{% if anomaly.anomaly_reviewed %}opacity-50{% endif %}">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ anomaly.id }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ anomaly.date.strftime('%Y-%m-%d') }}</td>
+                        <td class="px-6 py-4 text-sm text-gray-700 max-w-sm truncate">{{ anomaly.description }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-right {% if anomaly.amount > 0 %}text-green-600{% else %}text-red-600{% endif %}">
+                            ${{ "%.2f"|format(anomaly.amount) }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ anomaly.category }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-right text-sm">
+                            {% if not anomaly.anomaly_reviewed %}
+                            <button onclick="dismissAnomaly({{ anomaly.id }})"
+                                    class="text-gray-400 hover:text-green-600 font-medium text-xs border border-gray-300 rounded px-2 py-1 hover:border-green-400 transition-colors">
+                                Dismiss
+                            </button>
+                            {% else %}
+                            <span class="text-xs text-gray-400 italic">Reviewed</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="6" class="px-6 py-10 text-center text-sm text-gray-400">
+                            {% if show_reviewed %}No anomalies found.{% else %}No unreviewed anomalies. <a href="{{ url_for('anomalies', show_reviewed='1') }}" class="text-indigo-600 hover:underline">Show reviewed</a>.{% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        {% if anomalies.pages > 1 %}
+        <div class="anom-pager px-6 py-3 border-t border-gray-200 flex items-center justify-between">
+            <p class="text-sm text-gray-600">
+                Page <span class="font-medium">{{ anomalies.page }}</span> of
+                <span class="font-medium">{{ anomalies.pages }}</span>
+                &nbsp;({{ anomalies.total }} total)
+            </p>
+            <nav class="inline-flex rounded-md shadow-sm -space-x-px">
+                {% if anomalies.has_prev %}
+                <a href="{{ url_for('anomalies', page=anomalies.prev_num, sort=sort_by, show_reviewed=('1' if show_reviewed else '0')) }}"
+                   class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm text-gray-500 hover:bg-gray-50">&#8592;</a>
+                {% endif %}
+                {% for p in anomalies.iter_pages() %}
+                    {% if p %}
+                    <a href="{{ url_for('anomalies', page=p, sort=sort_by, show_reviewed=('1' if show_reviewed else '0')) }}"
+                       class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm {{ 'text-indigo-600 bg-indigo-50' if p == anomalies.page else 'text-gray-700 hover:bg-gray-50' }}">{{ p }}</a>
+                    {% else %}
+                    <span class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm text-gray-700">…</span>
+                    {% endif %}
+                {% endfor %}
+                {% if anomalies.has_next %}
+                <a href="{{ url_for('anomalies', page=anomalies.next_num, sort=sort_by, show_reviewed=('1' if show_reviewed else '0')) }}"
+                   class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm text-gray-500 hover:bg-gray-50">&#8594;</a>
+                {% endif %}
+            </nav>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+function dismissAnomaly(id) {
+    fetch('/anomalies/' + id + '/dismiss', { method: 'POST' })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.success) {
+            var row = document.getElementById('arow-' + id);
+            if (row) row.remove();
+            showToast('Anomaly dismissed.', 'success');
+        } else {
+            showToast('Dismiss failed: ' + data.error, 'error');
+        }
+    })
+    .catch(function() { showToast('Dismiss failed.', 'error'); });
+}
+</script>
+{% endblock %}
