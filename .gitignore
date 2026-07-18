@@ -21,6 +21,9 @@ node_modules/
 # Uploads / local data
 uploads/
 
+# Separate embedded project (own git repo)
+quick-test/
+
 # Editors / OS
 .claude/
 .DS_Store
