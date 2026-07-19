@@ -129,26 +129,29 @@ class SyncRepository:
         checking = checking if checking is not None else manual_cash("checking")
         savings = savings if savings is not None else manual_cash("savings")
 
-        # Brokerage sweep / settlement cash counts toward cash as well.
-        brokerage_cash = (db.session.query(func.sum(FinancialAccount.balance))
-                          .filter(FinancialAccount.account_type == AccountType.BROKERAGE.value,
-                                  FinancialAccount.is_active.is_(True))
-                          .scalar())
-        brokerage_cash = float(brokerage_cash or 0.0)
+        # Brokerage sweep / settlement cash counts toward cash as well. It is
+        # reported as Cash-class holdings (money market funds, CUR:USD); the
+        # account-level balance Plaid returns for an investment account is the
+        # account's *total* value, so summing it here would double count the
+        # holdings.
+        brokerage_cash = float(db.session.query(func.sum(HoldingRow.current_value))
+                               .filter(HoldingRow.asset_class == "Cash")
+                               .scalar() or 0.0)
 
         crypto = float(db.session.query(func.sum(HoldingRow.current_value))
                        .filter(HoldingRow.asset_class == "Crypto").scalar() or 0.0)
-        non_crypto = float(db.session.query(func.sum(HoldingRow.current_value))
-                           .filter(HoldingRow.asset_class != "Crypto").scalar() or 0.0)
+        invested = float(db.session.query(func.sum(HoldingRow.current_value))
+                         .filter(HoldingRow.asset_class.notin_(("Crypto", "Cash")))
+                         .scalar() or 0.0)
 
         cash = round(checking + savings + brokerage_cash, 2)
-        investments = round(non_crypto + crypto, 2)
+        investments = round(invested + crypto, 2)
         return {
             "checking": round(checking, 2),
             "savings": round(savings, 2),
             "brokerage_cash": round(brokerage_cash, 2),
             "cash": cash,
-            "brokerage": round(non_crypto, 2),
+            "brokerage": round(invested, 2),
             "crypto": round(crypto, 2),
             "investments": investments,
             "net_worth": round(cash + investments, 2),

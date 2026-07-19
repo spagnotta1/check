@@ -108,6 +108,26 @@ def test_net_worth_uses_synced_balances(app):
         totals["cash"] + totals["investments"], abs=0.01)
 
 
+def test_brokerage_account_value_not_double_counted_as_cash(app):
+    """Plaid reports an investment account's balance as its *total* value;
+    only Cash-class holdings (sweep/money market) may count toward cash."""
+    from finance_sync.repository import SyncRepository
+    db.session.add(FinancialAccount(
+        connection_id=1, external_id="brok-1", name="Brokerage",
+        account_type=AccountType.BROKERAGE.value, balance=10_500, is_active=True))
+    db.session.add(Holding(ticker="VTI", name="Total Market", shares=50,
+                           current_value=10_000, asset_class="Stock"))
+    db.session.add(Holding(ticker="CUR:USD", name="US Dollar", shares=500,
+                           current_value=500, asset_class="Cash"))
+    db.session.commit()
+
+    totals = SyncRepository.compute_totals()
+    assert totals["brokerage_cash"] == 500.0
+    assert totals["cash"] == 500.0          # no checking/savings synced or manual
+    assert totals["investments"] == 10_000.0
+    assert totals["net_worth"] == 10_500.0  # account value counted exactly once
+
+
 def test_crypto_split_out_in_totals(app):
     from finance_sync.repository import SyncRepository
     _connect("coinbase")
