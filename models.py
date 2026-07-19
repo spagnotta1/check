@@ -130,6 +130,19 @@ class ChatMessage(db.Model):
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
 
+class RecurringDismissal(db.Model):
+    """A detected recurring bill/subscription the user has marked as not
+    actually recurring. Matched against detected groups by normalized
+    description (see recurring.py), so it survives re-detection."""
+    __tablename__ = 'recurring_dismissals'
+
+    id          = db.Column(db.Integer, primary_key=True)
+    desc_key    = db.Column(db.String(255), nullable=False, unique=True)  # normalized description
+    description = db.Column(db.String(255), nullable=False)  # as displayed when dismissed
+    kind        = db.Column(db.String(20), nullable=False, default='subscription')  # 'bill' | 'subscription'
+    created_at  = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+
 class Holding(db.Model):
     __tablename__ = 'holdings'
 

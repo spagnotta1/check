@@ -22,8 +22,9 @@ from sqlalchemy import func, and_, or_
 from config import Config
 from models import (db, AppUser, Transaction, LogEntry, AccountBalance, Budget, Holding,
                     ChatMessage, Conversation, InstitutionConnection,
-                    FinancialAccount, SyncRun)
+                    FinancialAccount, SyncRun, RecurringDismissal)
 from rules import CategoryRules
+from recurring import detect_recurring, normalize_description
 from finance_sync.repository import SyncRepository
 from finance_sync.routes import sync_bp
 from finance_sync.scheduler import init_scheduler
@@ -231,6 +232,18 @@ def create_app(test_config=None):
                 t.anomaly_score = float(score)
         db.session.commit()
 
+    def _sticky_filter(session_key, *arg_keys, default=None):
+        """Resolve a filter value from the query string with session fallback.
+
+        A key that is present but empty means the user explicitly cleared the
+        filter (e.g. picked "All" in the form), so it must not fall back to
+        the stale session value; only a fully absent key does.
+        """
+        for key in arg_keys or (session_key,):
+            if key in request.args:
+                return request.args.get(key) or None
+        return session.get(session_key, default)
+
     def _build_transaction_query(account_filter, category_filter, start_date_str,
                                   end_date_str, direction_filter, search_query):
         filters = []
@@ -266,35 +279,28 @@ def create_app(test_config=None):
         """
         return SyncRepository.compute_totals()
 
+    def _dismissed_recurring_keys():
+        return [d.desc_key for d in RecurringDismissal.query.all()]
+
     def _detect_recurring_summary():
-        """Return a compact list of detected recurring expense items for Claude context."""
-        txns = Transaction.query.filter(Transaction.amount < 0).order_by(Transaction.date.asc()).all()
-        if not txns:
-            return []
-        df = pd.DataFrame([{
-            'date': pd.to_datetime(t.date),
+        """Return detected recurring bills and subscriptions for Claude context."""
+        txns = Transaction.query.order_by(Transaction.date.asc()).all()
+        detected = detect_recurring([{
+            'date': t.date,
             'description': t.description,
             'amount': float(t.amount),
             'category': t.category,
-        } for t in txns])
-        df['desc_norm'] = df['description'].str.replace(r'\d+', '', regex=True).str.strip().str.lower()
-        df['amount_bucket'] = df['amount'].round(0)
-        result = []
-        for (desc_norm, amt_bucket), grp in df.groupby(['desc_norm', 'amount_bucket']):
-            if len(grp) < 2:
-                continue
-            grp = grp.sort_values('date')
-            dates = grp['date'].tolist()
-            gaps = [(dates[i+1] - dates[i]).days for i in range(len(dates)-1)]
-            avg_gap = sum(gaps) / len(gaps)
-            if 20 <= avg_gap <= 40:
-                result.append({
-                    'description': grp['description'].iloc[0],
-                    'category': grp['category'].iloc[0],
-                    'monthly_amount': abs(float(grp['amount'].iloc[0])),
-                    'occurrences': len(grp),
-                })
-        return result
+        } for t in txns], dismissed_keys=_dismissed_recurring_keys())
+        return {
+            kind: [{
+                'description': g['description'],
+                'category': g['category'],
+                'monthly_amount': abs(g['monthly_amount']),
+                'occurrences': g['occurrences'],
+                'last_seen': g['last_seen'],
+            } for g in groups]
+            for kind, groups in detected.items()
+        }
 
     def _build_finance_context(months=6):
         """Assemble a full financial snapshot for Claude — spending, net worth, and complete holdings detail."""
@@ -326,7 +332,7 @@ def create_app(test_config=None):
         budget_status = [{'category': b.category, 'monthly_limit': float(b.monthly_limit)}
                          for b in Budget.query.all()]
 
-        # --- Recurring subscriptions ---
+        # --- Recurring bills & subscriptions ---
         recurring_items = _detect_recurring_summary()
 
         # --- Net worth ---
@@ -383,7 +389,8 @@ def create_app(test_config=None):
             'spending_by_category': spending,
             'monthly_cashflow_trend': monthly_trend,
             'budgets': budget_status,
-            'recurring_subscriptions': recurring_items,
+            'recurring_bills': recurring_items['bills'],
+            'recurring_subscriptions': recurring_items['subscriptions'],
         }
 
     # ---------------------------------------------------------------------------
@@ -409,10 +416,16 @@ def create_app(test_config=None):
         session['end_date'] = end_date_str
         session['account'] = account_filter
 
+        # Cascading category filter (multiselect via repeated ?category=
+        # params): URL-only (not sticky) so leaving the dashboard resets it.
+        category_filter = [c for c in request.args.getlist('category') if c]
+
         query = Transaction.query.filter(Transaction.date.between(start_date, end_date))
         if account_filter != 'both':
             query = query.filter(Transaction.account_name == account_filter)
-        transactions = query.all()
+        all_transactions = query.all()
+        transactions = ([t for t in all_transactions if t.category in category_filter]
+                        if category_filter else all_transactions)
 
         def is_transfer(t):
             return t.category.lower() in ['transfer', 'transfers']
@@ -427,16 +440,24 @@ def create_app(test_config=None):
         ))
         net_cashflow = total_income - total_outgo
 
-        category_stats = {}
-        for t in transactions:
-            if account_filter == 'both' and is_transfer(t):
-                continue
-            if t.category not in category_stats:
-                category_stats[t.category] = {'inbound': 0, 'outbound': 0}
-            if t.amount > 0:
-                category_stats[t.category]['inbound'] += float(t.amount)
-            else:
-                category_stats[t.category]['outbound'] += abs(float(t.amount))
+        def _category_breakdown(txn_list):
+            stats = {}
+            for t in txn_list:
+                if account_filter == 'both' and is_transfer(t):
+                    continue
+                if t.category not in stats:
+                    stats[t.category] = {'inbound': 0, 'outbound': 0}
+                if t.amount > 0:
+                    stats[t.category]['inbound'] += float(t.amount)
+                else:
+                    stats[t.category]['outbound'] += abs(float(t.amount))
+            return stats
+
+        category_stats = _category_breakdown(transactions)
+        # The breakdown grid always lists every category so the user can
+        # click between them even while one is selected.
+        all_category_stats = (category_stats if not category_filter
+                              else _category_breakdown(all_transactions))
 
         # Monthly outgo trend
         monthly_outgo_q = db.session.query(
@@ -447,6 +468,8 @@ def create_app(test_config=None):
             monthly_outgo_q = monthly_outgo_q.filter(Transaction.account_name == account_filter)
         else:
             monthly_outgo_q = monthly_outgo_q.filter(~func.lower(Transaction.category).in_(['transfer', 'transfers']))
+        if category_filter:
+            monthly_outgo_q = monthly_outgo_q.filter(Transaction.category.in_(category_filter))
         monthly_outgo_data = [{'month': r.month, 'total': float(r.total)}
                                for r in monthly_outgo_q.group_by('month').order_by('month').all()]
 
@@ -459,6 +482,8 @@ def create_app(test_config=None):
             monthly_income_q = monthly_income_q.filter(Transaction.account_name == account_filter)
         else:
             monthly_income_q = monthly_income_q.filter(~func.lower(Transaction.category).in_(['transfer', 'transfers']))
+        if category_filter:
+            monthly_income_q = monthly_income_q.filter(Transaction.category.in_(category_filter))
         monthly_income_data = [{'month': r.month, 'total': float(r.total)}
                                 for r in monthly_income_q.group_by('month').order_by('month').all()]
 
@@ -466,6 +491,8 @@ def create_app(test_config=None):
         bal_q = Transaction.query.filter(Transaction.date.between(start_date, end_date))
         if account_filter != 'both':
             bal_q = bal_q.filter(Transaction.account_name == account_filter)
+        if category_filter:
+            bal_q = bal_q.filter(Transaction.category.in_(category_filter))
         bal_txns = bal_q.order_by(Transaction.date.asc()).all()
         running = 0.0
         balance_history = []
@@ -480,6 +507,8 @@ def create_app(test_config=None):
         prev_q = Transaction.query.filter(Transaction.date.between(prev_start, prev_end))
         if account_filter != 'both':
             prev_q = prev_q.filter(Transaction.account_name == account_filter)
+        if category_filter:
+            prev_q = prev_q.filter(Transaction.category.in_(category_filter))
         prev_txns = prev_q.all()
         prev_income = sum(float(t.amount) for t in prev_txns if t.amount > 0 and (account_filter != 'both' or not is_transfer(t)))
         prev_outgo = abs(sum(float(t.amount) for t in prev_txns if t.amount < 0 and (account_filter != 'both' or not is_transfer(t))))
@@ -501,6 +530,10 @@ def create_app(test_config=None):
         for b in budgets:
             if b.account_name == 'both' or b.account_name == account_filter:
                 budget_map[b.category] = float(b.monthly_limit)
+        # When a category is selected, the budget chart/insights cascade to it;
+        # the breakdown grid keeps the full map so every row shows its budget.
+        chart_budget_map = ({c: l for c, l in budget_map.items() if c in category_filter}
+                            if category_filter else budget_map)
 
         # Normalize spend to a monthly average so budget limits are always monthly comparisons.
         # For periods < 1 month we compare raw spend vs limit (no extrapolation).
@@ -540,7 +573,7 @@ def create_app(test_config=None):
         if insights:
             insights = insights[:5]
         over_budget = [a for a in budget_alerts if a['level'] == 'over']
-        under_budget = [c for c, lim in budget_map.items()
+        under_budget = [c for c, lim in chart_budget_map.items()
                         if max(0, category_stats.get(c, {}).get('outbound', 0) - category_stats.get(c, {}).get('inbound', 0)) / period_months < lim * 0.5]
         if over_budget:
             insights.insert(0, {'text': f"{len(over_budget)} budget(s) exceeded this period.", 'positive': False})
@@ -586,6 +619,8 @@ def create_app(test_config=None):
                                total_outgo=total_outgo,
                                net_cashflow=net_cashflow,
                                category_stats=category_stats,
+                               all_category_stats=all_category_stats,
+                               category_filter=category_filter,
                                monthly_outgo=monthly_outgo_data,
                                monthly_income=monthly_income_data,
                                balance_history=balance_history,
@@ -596,6 +631,7 @@ def create_app(test_config=None):
                                prev_start=prev_start.strftime('%Y-%m-%d'),
                                prev_end=prev_end.strftime('%Y-%m-%d'),
                                budget_map=budget_map,
+                               chart_budget_map=chart_budget_map,
                                budget_alerts=budget_alerts,
                                period_months=period_months,
                                insights=insights,
@@ -717,12 +753,12 @@ def create_app(test_config=None):
         sort_by = request.args.get('sort_by', 'date')
         sort_dir = request.args.get('sort_dir', 'desc')
 
-        start_date_str = request.args.get('start_date') or session.get('start_date')
-        end_date_str = request.args.get('end_date') or session.get('end_date')
-        account_filter = request.args.get('account') or session.get('account', 'both')
-        category_filter = request.args.get('category') or session.get('category')
-        direction_filter = request.args.get('type') or request.args.get('direction') or session.get('direction')
-        search_query = request.args.get('search') or session.get('search')
+        start_date_str = _sticky_filter('start_date')
+        end_date_str = _sticky_filter('end_date')
+        account_filter = _sticky_filter('account', default='both')
+        category_filter = _sticky_filter('category')
+        direction_filter = _sticky_filter('direction', 'type', 'direction')
+        search_query = _sticky_filter('search')
 
         if request.args.get('type'):
             session.pop('search', None)
@@ -764,7 +800,7 @@ def create_app(test_config=None):
                                end_date=end_date_str,
                                account_filter=account_filter,
                                category_filter=category_filter,
-                               direction_filter=session['direction'],
+                               direction_filter=direction_filter,
                                search_query=search_query,
                                sort_by=sort_by,
                                sort_dir=sort_dir,
@@ -883,12 +919,12 @@ def create_app(test_config=None):
 
     @app.route('/export')
     def export():
-        account_filter = request.args.get('account') or session.get('account', 'both')
-        category_filter = request.args.get('category') or session.get('category')
-        start_date_str = request.args.get('start_date') or session.get('start_date')
-        end_date_str = request.args.get('end_date') or session.get('end_date')
-        direction_filter = request.args.get('direction') or session.get('direction')
-        search_query = request.args.get('search') or session.get('search')
+        account_filter = _sticky_filter('account', default='both')
+        category_filter = _sticky_filter('category')
+        start_date_str = _sticky_filter('start_date')
+        end_date_str = _sticky_filter('end_date')
+        direction_filter = _sticky_filter('direction', 'type', 'direction')
+        search_query = _sticky_filter('search')
 
         query = _build_transaction_query(account_filter, category_filter, start_date_str,
                                           end_date_str, direction_filter, search_query)
@@ -978,51 +1014,44 @@ def create_app(test_config=None):
             txns = txns.filter(Transaction.account_name == account_filter)
         txns = txns.order_by(Transaction.date.asc()).all()
 
-        if not txns:
-            return render_template('recurring.html', recurring_groups=[], account_filter=account_filter)
-
-        df = pd.DataFrame([{
-            'id': t.id,
-            'date': pd.to_datetime(t.date),
+        dismissals = RecurringDismissal.query.order_by(RecurringDismissal.created_at.desc()).all()
+        detected = detect_recurring([{
+            'date': t.date,
             'description': t.description,
             'amount': float(t.amount),
             'category': t.category,
             'account_name': t.account_name,
-        } for t in txns])
+        } for t in txns], dismissed_keys=[d.desc_key for d in dismissals])
 
-        # Normalize description: strip digits, extra spaces
-        df['desc_norm'] = df['description'].str.replace(r'\d+', '', regex=True).str.strip().str.lower()
-        df['amount_bucket'] = df['amount'].round(0)
-
-        groups = df.groupby(['desc_norm', 'amount_bucket'])
-        recurring_groups = []
-        for (desc_norm, amt_bucket), grp in groups:
-            if len(grp) < 2:
-                continue
-            grp = grp.sort_values('date')
-            dates = grp['date'].tolist()
-            gaps = [(dates[i+1] - dates[i]).days for i in range(len(dates)-1)]
-            avg_gap = sum(gaps) / len(gaps)
-            if 20 <= avg_gap <= 40:
-                last_date = grp['date'].iloc[-1]
-                next_date = (last_date + pd.Timedelta(days=round(avg_gap))).strftime('%Y-%m-%d')
-                recurring_groups.append({
-                    'description': grp['description'].iloc[0],
-                    'category': grp['category'].iloc[0],
-                    'account_name': grp['account_name'].iloc[0],
-                    'amount': grp['amount'].iloc[0],
-                    'occurrences': len(grp),
-                    'avg_gap_days': round(avg_gap, 1),
-                    'first_seen': grp['date'].iloc[0].strftime('%Y-%m-%d'),
-                    'last_seen': last_date.strftime('%Y-%m-%d'),
-                    'next_expected': next_date,
-                })
-
-        recurring_groups.sort(key=lambda x: x['occurrences'], reverse=True)
         accounts = db.session.query(Transaction.account_name).distinct().all()
-        return render_template('recurring.html', recurring_groups=recurring_groups,
+        return render_template('recurring.html',
+                               bills=detected['bills'],
+                               subscriptions=detected['subscriptions'],
+                               dismissals=dismissals,
                                account_filter=account_filter,
                                accounts=[a[0] for a in accounts])
+
+    @app.route('/recurring/dismiss', methods=['POST'])
+    def recurring_dismiss():
+        description = (request.form.get('description') or '').strip()
+        kind = request.form.get('kind', 'subscription')
+        desc_key = normalize_description(description)
+        if desc_key and not RecurringDismissal.query.filter_by(desc_key=desc_key).first():
+            db.session.add(RecurringDismissal(desc_key=desc_key, description=description,
+                                              kind=kind))
+            db.session.commit()
+            flash(f'"{description}" hidden from recurring view.', 'success')
+        return redirect(url_for('recurring'))
+
+    @app.route('/recurring/restore', methods=['POST'])
+    def recurring_restore():
+        dismissal_id = request.form.get('id', type=int)
+        dismissal = db.session.get(RecurringDismissal, dismissal_id) if dismissal_id else None
+        if dismissal:
+            db.session.delete(dismissal)
+            db.session.commit()
+            flash(f'"{dismissal.description}" restored to recurring view.', 'success')
+        return redirect(url_for('recurring'))
 
     # ---------------------------------------------------------------------------
     # Budgets

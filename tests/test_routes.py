@@ -75,6 +75,32 @@ def test_synced_holding_cannot_be_edited_manually(client):
     assert resp.status_code == 409
 
 
+def test_transaction_filters_can_be_cleared(client):
+    # Prime the sticky session filters via a drill-down style link.
+    resp = client.get("/transactions?type=inbound&category=Income")
+    assert resp.status_code == 200
+    with client.session_transaction() as sess:
+        assert sess.get("direction") == "inbound"
+        assert sess.get("category") == "Income"
+
+    # Submitting the filter form with everything reset to "All" sends the
+    # params as empty strings — that must clear the filters, not fall back
+    # to the previously stored session values.
+    resp = client.get(
+        "/transactions?account=&category=&direction=&start_date=&end_date=&search="
+    )
+    assert resp.status_code == 200
+    assert b'value="inbound" selected' not in resp.data
+    with client.session_transaction() as sess:
+        assert sess.get("direction") is None
+        assert sess.get("category") is None
+
+    # Params absent entirely (e.g. pagination links) still keep session filters.
+    client.get("/transactions?direction=outgo")
+    resp = client.get("/transactions?page=1")
+    assert b'value="outgo"   selected' in resp.data
+
+
 def test_pages_render(client):
     _connect(client, "coinbase")
     _connect(client, "plaid")
@@ -87,3 +113,44 @@ def test_pages_render(client):
     assert "Synced" in body
     body = client.get("/connections").data.decode()
     assert "Coinbase" in body and "Connected" in body
+
+
+def test_dashboard_category_cascading_filter(client):
+    from datetime import date
+    from models import db, Transaction
+
+    db.session.add(Transaction(account_name="Checking", date=date(2026, 3, 5),
+                               description="AJI SUSHI", amount=-77.31, category="Food"))
+    db.session.add(Transaction(account_name="Checking", date=date(2026, 3, 6),
+                               description="SHELL GAS", amount=-53.19, category="Gas"))
+    db.session.add(Transaction(account_name="Checking", date=date(2026, 3, 7),
+                               description="MTA TICKET", amount=-20.00, category="Travel"))
+    db.session.commit()
+    window = "start_date=2026-03-01&end_date=2026-03-31"
+
+    # Unfiltered: all categories feed the charts (running balance ends
+    # at -77.31 - 53.19 - 20.00 = -150.50).
+    html = client.get(f"/?{window}").get_data(as_text=True)
+    assert "-150.5" in html
+
+    # Single category: only Food data reaches the visualizations
+    # (balance history JSON), but the breakdown grid still lists the other
+    # categories so the user can switch or extend the filter.
+    html = client.get(f"/?{window}&category=Food").get_data(as_text=True)
+    assert "-77.31" in html
+    assert "-130.5" not in html and "-150.5" not in html
+    assert "Category: Food" in html                     # active-filter chip
+    assert ">Gas</a>" in html                           # grid row still clickable
+    assert "category=Food&amp;category=Gas" in html \
+        or "category=Food&category=Gas" in html         # row link adds Gas to the selection
+
+    # Multiselect: Food + Gas cascade together, Travel stays excluded.
+    html = client.get(f"/?{window}&category=Food&category=Gas").get_data(as_text=True)
+    assert "-130.5" in html
+    assert "-150.5" not in html
+    assert "Category: Food" in html and "Category: Gas" in html
+    assert "clear categories" in html
+
+    # No category params → no chips.
+    html = client.get(f"/?{window}").get_data(as_text=True)
+    assert "Category: Food" not in html
