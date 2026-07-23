@@ -13,10 +13,16 @@
 @media (max-width: 768px) {
   .dash-cols { grid-template-columns: 1fr !important; }
 }
+.dash-vals-toggle.on {
+  opacity: 1 !important;
+  color: var(--red) !important;
+  border-color: var(--red) !important;
+  background: color-mix(in srgb, var(--red) 14%, transparent) !important;
+}
 @media (max-width: 640px) {
   .dash-table-scroll { overflow-x: auto !important; }
   .dash-table-scroll table { min-width: 560px; }
-  .dash-donut { height: 190px !important; }
+  .dash-catbar { height: 190px !important; }
 
   /* KPI tiles: 2-up grid like banking-app stat cards */
   .dash-kpis { grid-template-columns: repeat(2, 1fr) !important; gap: .625rem !important; }
@@ -99,10 +105,10 @@
     <!-- Net Cash Flow -->
     <div style="background:var(--panel);border-radius:8px;border-left:4px solid {% if net_cashflow>=0 %}#22c55e{% else %}var(--red,#ef4444){% endif %};padding:14px 18px">
       <p style="font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--fg);opacity:.5;margin:0 0 5px">Net Cash Flow</p>
-      <p style="font-size:1.55rem;font-weight:700;margin:0;color:{% if net_cashflow>=0 %}#22c55e{% else %}var(--red,#ef4444){% endif %}">${{ "%.0f"|format(net_cashflow) }}</p>
+      <p style="font-size:1.55rem;font-weight:700;margin:0;color:{% if net_cashflow>=0 %}#22c55e{% else %}var(--red,#ef4444){% endif %}">${{ "{:,.0f}".format(net_cashflow) }}</p>
       <p style="font-size:.7rem;margin:5px 0 0;color:var(--fg);opacity:.45">vs prev:&nbsp;
         <span style="font-weight:600;color:{% if net_delta>=0 %}#22c55e{% else %}var(--red,#ef4444){% endif %}">
-          {% if net_delta>=0 %}+${{ "%.0f"|format(net_delta) }}{% else %}-${{ "%.0f"|format(net_delta|abs) }}{% endif %}
+          {% if net_delta>=0 %}+${{ "{:,.0f}".format(net_delta) }}{% else %}-${{ "{:,.0f}".format(net_delta|abs) }}{% endif %}
         </span>
       </p>
     </div>
@@ -110,10 +116,10 @@
     <!-- Total Income -->
     <div style="background:var(--panel);border-radius:8px;border-left:4px solid #22c55e;padding:14px 18px">
       <p style="font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--fg);opacity:.5;margin:0 0 5px">Total Income</p>
-      <p style="font-size:1.55rem;font-weight:700;margin:0;color:#22c55e">${{ "%.0f"|format(total_income) }}</p>
+      <p style="font-size:1.55rem;font-weight:700;margin:0;color:#22c55e">${{ "{:,.0f}".format(total_income) }}</p>
       <p style="font-size:.7rem;margin:5px 0 0;color:var(--fg);opacity:.45">vs prev:&nbsp;
         <span style="font-weight:600;color:{% if income_delta>=0 %}#22c55e{% else %}var(--red,#ef4444){% endif %}">
-          {% if income_delta>=0 %}+${{ "%.0f"|format(income_delta) }}{% else %}-${{ "%.0f"|format(income_delta|abs) }}{% endif %}
+          {% if income_delta>=0 %}+${{ "{:,.0f}".format(income_delta) }}{% else %}-${{ "{:,.0f}".format(income_delta|abs) }}{% endif %}
         </span>
       </p>
     </div>
@@ -121,10 +127,10 @@
     <!-- Total Outgo -->
     <div style="background:var(--panel);border-radius:8px;border-left:4px solid var(--red,#ef4444);padding:14px 18px">
       <p style="font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--fg);opacity:.5;margin:0 0 5px">Total Outgo</p>
-      <p style="font-size:1.55rem;font-weight:700;margin:0;color:var(--red,#ef4444)">${{ "%.0f"|format(total_outgo) }}</p>
+      <p style="font-size:1.55rem;font-weight:700;margin:0;color:var(--red,#ef4444)">${{ "{:,.0f}".format(total_outgo) }}</p>
       <p style="font-size:.7rem;margin:5px 0 0;color:var(--fg);opacity:.45">vs prev:&nbsp;
         <span style="font-weight:600;color:{% if outgo_delta<=0 %}#22c55e{% else %}var(--red,#ef4444){% endif %}">
-          {% if outgo_delta>=0 %}+${{ "%.0f"|format(outgo_delta) }}{% else %}-${{ "%.0f"|format(outgo_delta|abs) }}{% endif %}
+          {% if outgo_delta>=0 %}+${{ "{:,.0f}".format(outgo_delta) }}{% else %}-${{ "{:,.0f}".format(outgo_delta|abs) }}{% endif %}
         </span>
       </p>
     </div>
@@ -161,8 +167,8 @@
       <span style="font-size:.8rem;font-weight:500;color:var(--fg)">
         {% if alert.level=='over' %}🔴{% else %}🟡{% endif %}
         &nbsp;<strong>{{ alert.category }}</strong>:
-        {% if alert.level=='over' %}over budget — ${{ "%.0f"|format(alert.monthly_avg) }}/mo avg / ${{ "%.0f"|format(alert.limit) }}/mo limit ({{ alert.pct }}%)
-        {% else %}{{ alert.pct }}% of monthly budget — ${{ "%.0f"|format(alert.monthly_avg) }}/mo avg / ${{ "%.0f"|format(alert.limit) }}/mo limit{% endif %}
+        {% if alert.level=='over' %}over budget — ${{ "{:,.0f}".format(alert.monthly_avg) }}/mo avg / ${{ "{:,.0f}".format(alert.limit) }}/mo limit ({{ alert.pct }}%)
+        {% else %}{{ alert.pct }}% of monthly budget — ${{ "{:,.0f}".format(alert.monthly_avg) }}/mo avg / ${{ "{:,.0f}".format(alert.limit) }}/mo limit{% endif %}
       </span>
       <a href="{{ url_for('budgets') }}" style="font-size:.75rem;color:#6366f1;font-weight:500;text-decoration:none;white-space:nowrap;margin-left:12px">Manage →</a>
     </div>
@@ -215,14 +221,14 @@
               </td>
               <td style="padding:7px 12px;text-align:right">
                 <a href="{{ url_for('transactions',start_date=start_date,end_date=end_date,account=account_filter,category=category,type='inbound') }}"
-                  style="color:#22c55e;text-decoration:underline">${{ "%.0f"|format(stats.inbound) }}</a>
+                  style="color:#22c55e;text-decoration:underline">${{ "{:,.0f}".format(stats.inbound) }}</a>
               </td>
               <td style="padding:7px 12px;text-align:right">
                 <a href="{{ url_for('transactions',start_date=start_date,end_date=end_date,account=account_filter,category=category,type='outgo') }}"
-                  style="color:var(--red,#ef4444);text-decoration:underline">${{ "%.0f"|format(stats.outbound) }}</a>
+                  style="color:var(--red,#ef4444);text-decoration:underline">${{ "{:,.0f}".format(stats.outbound) }}</a>
               </td>
               <td style="padding:7px 12px;text-align:right;font-weight:500;color:{% if stats.inbound-stats.outbound>=0 %}#22c55e{% else %}var(--red,#ef4444){% endif %}">
-                ${{ "%.0f"|format(stats.inbound-stats.outbound) }}
+                ${{ "{:,.0f}".format(stats.inbound-stats.outbound) }}
               </td>
               <td style="padding:7px 12px;min-width:130px">
                 {% if category in budget_map %}
@@ -236,7 +242,7 @@
                       <div style="width:{{ pct }}%;height:5px;border-radius:999px;background:{% if over %}var(--red,#ef4444){% elif pct>75 %}#f59e0b{% else %}#22c55e{% endif %}"></div>
                     </div>
                     <span style="font-size:.68rem;white-space:nowrap;color:{% if over %}var(--red,#ef4444){% else %}var(--fg){% endif %};opacity:.8">
-                      ${{ "%.0f"|format(mo_avg) }}/mo / ${{ "%.0f"|format(lim) }}/mo
+                      ${{ "{:,.0f}".format(mo_avg) }}/mo / ${{ "{:,.0f}".format(lim) }}/mo
                     </span>
                   </div>
                 {% else %}
@@ -310,8 +316,8 @@
 
   </div>
 
-  <!-- ── Chart row 2: Running Balance | Donut charts ── -->
-  <div class="dash-cols" style="display:grid;grid-template-columns:3fr 2fr;gap:1rem">
+  <!-- ── Chart row 2: Running Balance | Category bars ── -->
+  <div class="dash-cols" style="display:grid;grid-template-columns:3fr 2fr;gap:1rem;align-items:start">
 
     <div style="background:var(--panel);border-radius:8px;border:1px solid var(--border);padding:14px 18px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin:0 0 12px">
@@ -327,21 +333,31 @@
       <div style="flex:1">
         <div style="display:flex;justify-content:space-between;align-items:center;margin:0 0 6px">
           <h3 style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--fg);opacity:.65;margin:0">Income by Category</h3>
-          <button onclick="openFocus('incomeChart','Income by Category')" title="Expand" style="background:none;border:1px solid var(--border);border-radius:6px;padding:3px 6px;cursor:pointer;color:var(--fg);opacity:.5;display:flex;align-items:center;line-height:1" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=.5">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
-          </button>
+          <div style="display:flex;align-items:center;gap:4px">
+            <button onclick="toggleBarValues('incomeChart')" id="vals-incomeChart" class="dash-vals-toggle" title="Show values on bars" aria-pressed="false" style="background:none;border:1px solid var(--border);border-radius:6px;padding:3px 6px;cursor:pointer;color:var(--fg);opacity:.5;display:flex;align-items:center;line-height:1" onmouseover="this.style.opacity=1" onmouseout="if(!this.classList.contains('on'))this.style.opacity=.5">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/><circle cx="7.5" cy="7.5" r="1.5" fill="currentColor" stroke="none"/></svg>
+            </button>
+            <button onclick="openFocus('incomeChart','Income by Category')" title="Expand" style="background:none;border:1px solid var(--border);border-radius:6px;padding:3px 6px;cursor:pointer;color:var(--fg);opacity:.5;display:flex;align-items:center;line-height:1" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=.5">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+            </button>
+          </div>
         </div>
-        <div class="dash-donut" style="height:130px"><canvas id="incomeChart"></canvas></div>
+        <div class="dash-catbar" style="height:190px"><canvas id="incomeChart"></canvas></div>
       </div>
       <div style="height:1px;background:var(--border)"></div>
       <div style="flex:1">
         <div style="display:flex;justify-content:space-between;align-items:center;margin:0 0 6px">
           <h3 style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--fg);opacity:.65;margin:0">Outgo by Category</h3>
-          <button onclick="openFocus('outgoChart','Outgo by Category')" title="Expand" style="background:none;border:1px solid var(--border);border-radius:6px;padding:3px 6px;cursor:pointer;color:var(--fg);opacity:.5;display:flex;align-items:center;line-height:1" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=.5">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
-          </button>
+          <div style="display:flex;align-items:center;gap:4px">
+            <button onclick="toggleBarValues('outgoChart')" id="vals-outgoChart" class="dash-vals-toggle" title="Show values on bars" aria-pressed="false" style="background:none;border:1px solid var(--border);border-radius:6px;padding:3px 6px;cursor:pointer;color:var(--fg);opacity:.5;display:flex;align-items:center;line-height:1" onmouseover="this.style.opacity=1" onmouseout="if(!this.classList.contains('on'))this.style.opacity=.5">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/><circle cx="7.5" cy="7.5" r="1.5" fill="currentColor" stroke="none"/></svg>
+            </button>
+            <button onclick="openFocus('outgoChart','Outgo by Category')" title="Expand" style="background:none;border:1px solid var(--border);border-radius:6px;padding:3px 6px;cursor:pointer;color:var(--fg);opacity:.5;display:flex;align-items:center;line-height:1" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=.5">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+            </button>
+          </div>
         </div>
-        <div class="dash-donut" style="height:130px"><canvas id="outgoChart"></canvas></div>
+        <div class="dash-catbar" style="height:190px"><canvas id="outgoChart"></canvas></div>
       </div>
     </div>
 
@@ -377,7 +393,7 @@
 
 <script>
 // Run immediately if DOM is ready (SPA navigation), or wait for the event on first load.
-(function _initDashboard() {
+window._initDashboard = function _initDashboard() {
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', _initDashboard);
     return;
@@ -516,29 +532,106 @@
     });
   }
 
-  // ── Income + Outgo donuts ──
+  // ── Income + Outgo — ranked horizontal bars ──
+  // A donut with 10+ slices is unreadable (legend truncates, slivers are
+  // indistinguishable) — a single-hue ranked bar scales to any category
+  // count and reads by length instead of by color-matching a legend.
   var cats    = {{ category_stats.keys()|list|tojson }};
   var inArr   = {{ category_stats.values()|map(attribute='inbound')|list|tojson }};
   var outArr  = {{ category_stats.values()|map(attribute='outbound')|list|tojson }};
-  var greens  = ['#22c55e','#16a34a','#4ade80','#86efac','#15803d','#bbf7d0','#166534','#dcfce7'];
-  var reds    = ['#ef4444','#dc2626','#f87171','#fca5a5','#b91c1c','#fecaca','#7f1d1d','#fee2e2'];
+  var CAT_BAR_LIMIT = 6;
 
-  function donutConfig(dataArr, palette) {
+  function topCategories(labels, values, limit) {
+    var pairs = labels.map(function(c, i) { return { cat: c, val: values[i] || 0 }; })
+                       .filter(function(p) { return p.val > 0; })
+                       .sort(function(a, b) { return b.val - a.val; });
+    if (pairs.length > limit) {
+      var top = pairs.slice(0, limit);
+      var rest = pairs.slice(limit).reduce(function(s, p) { return s + p.val; }, 0);
+      top.push({ cat: 'Other', val: rest });
+      return top;
+    }
+    return pairs;
+  }
+
+  // Opt-in value callout at each bar's end — off by default (selective
+  // labeling), toggled per-chart via the tag icon in the card header.
+  // NOTE: Chart.js routes everything under `options` through its context/
+  // resolver Proxy, which chokes on a raw function value stored there
+  // ("Cannot convert object to primitive value") — so the formatter is
+  // captured via closure below, never placed inside chart options. Only
+  // plain primitives (enabled: bool, color: string) go in options.
+  if (!window._valueCalloutRegistered) {
+    Chart.register({
+      id: 'valueCallout',
+      afterDatasetsDraw: function(chart) {
+        var opts = chart.options.plugins && chart.options.plugins.valueCallout;
+        if (!opts || !opts.enabled) return;
+        var meta = chart.getDatasetMeta(0);
+        var data = chart.data.datasets[0].data;
+        var ctx = chart.ctx;
+        ctx.save();
+        ctx.font = '600 10px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif';
+        ctx.fillStyle = opts.color || '#111827';
+        ctx.textBaseline = 'middle';
+        ctx.textAlign = 'left';
+        meta.data.forEach(function(bar, i) {
+          ctx.fillText(cur(data[i]), bar.x + 6, bar.y);
+        });
+        ctx.restore();
+      }
+    });
+    window._valueCalloutRegistered = true;
+  }
+
+  window._dashShowValues = window._dashShowValues || { incomeChart: false, outgoChart: false };
+
+  function rankedBarConfig(chartId, dataArr, color) {
+    var top = topCategories(cats, dataArr, CAT_BAR_LIMIT);
+    var showVals = !!window._dashShowValues[chartId];
     return {
-      type: 'doughnut',
-      data: { labels: cats, datasets: [{ data: dataArr, backgroundColor: palette, borderColor: C.panel, borderWidth: 1 }] },
+      type: 'bar',
+      data: {
+        labels: top.map(function(p) { return p.cat; }),
+        datasets: [{
+          data: top.map(function(p) { return p.val; }),
+          backgroundColor: color,
+          borderRadius: 4,
+          maxBarThickness: 18,
+          categoryPercentage: 0.7,
+          barPercentage: 0.9
+        }]
+      },
       options: {
+        indexAxis: 'y',
         responsive: true, maintainAspectRatio: false,
+        layout: { padding: { right: showVals ? 44 : 8 } },
         plugins: {
-          legend: { position: window.innerWidth < 640 ? 'bottom' : 'right', labels: { color: C.fg, boxWidth: 9, font: { size: 9 } } },
-          tooltip: Object.assign({ callbacks: { label: function(ctx){ return ctx.label+': '+cur(ctx.raw); } } }, tip)
+          legend: { display: false },
+          tooltip: Object.assign({ callbacks: { label: function(ctx){ return cur(ctx.raw); } } }, tip),
+          valueCallout: { enabled: showVals, color: C.fg, format: cur }
+        },
+        scales: {
+          x: { ticks: Object.assign({ callback: function(v){ return cur(v); } }, tickColor), grid: { color: C.border }, beginAtZero: true },
+          y: { ticks: tickColor, grid: { display: false } }
         }
       }
     };
   }
 
-  _createChart('incomeChart', function() { return donutConfig(inArr, greens); });
-  _createChart('outgoChart',  function() { return donutConfig(outArr, reds); });
+  _createChart('incomeChart', function() { return rankedBarConfig('incomeChart', inArr, '#22c55e'); });
+  _createChart('outgoChart',  function() { return rankedBarConfig('outgoChart',  outArr, C.red); });
+
+  // Re-sync each toggle button's visual state (the toggle preference lives on
+  // window and survives SPA navigation; the button HTML is re-rendered fresh).
+  ['incomeChart', 'outgoChart'].forEach(function(id) {
+    var btn = document.getElementById('vals-' + id);
+    if (!btn) return;
+    var on = !!window._dashShowValues[id];
+    btn.classList.toggle('on', on);
+    btn.setAttribute('aria-pressed', String(on));
+    btn.style.opacity = on ? 1 : .5;
+  });
 
   // ── Budget vs. Actuals ──
   var bmap    = {{ chart_budget_map|tojson }};
@@ -583,7 +676,37 @@
       }
     })
     .catch(function(){});
-})(); // _initDashboard
+}; // _initDashboard
+window._initDashboard();
+
+// Rebuild all charts with fresh colors whenever the theme changes
+// (avoid stacking duplicate listeners across SPA navigations).
+document.removeEventListener('check:theme-changed', window._dashThemeHandler);
+window._dashThemeHandler = function() {
+  closeFocus();
+  window._initDashboard();
+};
+document.addEventListener('check:theme-changed', window._dashThemeHandler);
+
+// ── Category bar value-callout toggle ──
+function toggleBarValues(chartId) {
+  window._dashShowValues = window._dashShowValues || {};
+  var on = !window._dashShowValues[chartId];
+  window._dashShowValues[chartId] = on;
+
+  var btn = document.getElementById('vals-' + chartId);
+  if (btn) {
+    btn.classList.toggle('on', on);
+    btn.setAttribute('aria-pressed', String(on));
+    btn.style.opacity = on ? 1 : .5;
+  }
+
+  var chart = typeof Chart !== 'undefined' && Chart.getChart ? Chart.getChart(chartId) : null;
+  if (!chart) return;
+  chart.options.plugins.valueCallout.enabled = on;
+  chart.options.layout.padding.right = on ? 44 : 8;
+  chart.update();
+}
 
 // ── Focus modal ──
 var _focusChart = null;

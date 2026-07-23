@@ -331,7 +331,7 @@
                                 </td>
                                 <td class="px-3 py-3 text-sm text-gray-500 max-w-[160px] truncate">{{ h.account_name }}</td>
                                 <td class="px-3 py-3 text-sm text-gray-700 text-right">
-                                    {% if h.shares > 0 %}{{ "%.4f"|format(h.shares) }}{% else %}—{% endif %}
+                                    {% if h.shares > 0 %}{{ "{:,.4f}".format(h.shares) }}{% else %}—{% endif %}
                                 </td>
                                 <td class="px-3 py-3 text-sm text-gray-500 text-right">
                                     {% if h.avg_cost is not none %}${{ "{:,.2f}".format(h.avg_cost) }}{% else %}—{% endif %}
@@ -428,7 +428,7 @@
 
 {% if portfolio_by_class %}
 <script>
-(function _initInvestments() {
+window._initInvestments = function _initInvestments() {
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', _initInvestments); return;
   }
@@ -439,6 +439,7 @@
   const portfolioData = {{ portfolio_by_class|tojson }};
   const palette = ['#6366f1','#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#f43f5e'];
   const canvas = document.getElementById('portfolioDonut');
+  const panelColor = getComputedStyle(document.documentElement).getPropertyValue('--panel').trim() || '#fff';
   if (canvas && Object.keys(portfolioData).length > 0) {
     new Chart(canvas, {
       type: 'doughnut',
@@ -448,7 +449,7 @@
           data: Object.values(portfolioData),
           backgroundColor: palette.slice(0, Object.keys(portfolioData).length),
           borderWidth: 2,
-          borderColor: '#fff',
+          borderColor: panelColor,
         }]
       },
       options: {
@@ -465,7 +466,12 @@
       }
     });
   }
-})();
+};
+window._initInvestments();
+
+document.removeEventListener('check:theme-changed', window._investThemeHandler);
+window._investThemeHandler = function() { window._initInvestments(); };
+document.addEventListener('check:theme-changed', window._investThemeHandler);
 </script>
 {% endif %}
 

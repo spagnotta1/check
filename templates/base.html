@@ -139,63 +139,87 @@
   }
 
   /* ════════════════════════════════════════════════════════════════════
-     Theme Picker Panel
+     Profile / Settings Dropdown  (account, theme, connections, rules, …)
      ════════════════════════════════════════════════════════════════════ */
 
-  #theme-panel {
-    position: fixed;
-    bottom: 64px;
-    left: 12px;
-    width: 340px;
+  #profile-menu-wrap { position: relative; }
+
+  #profile-btn {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: var(--red);
+    color: #fff;
+    font-weight: 700;
+    font-size: .8rem;
+    letter-spacing: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: transform .12s, box-shadow .15s;
+  }
+  #profile-btn:hover { transform: scale(1.07); box-shadow: 0 2px 10px rgba(0,0,0,.22); }
+
+  #profile-menu {
+    position: absolute;
+    top: calc(100% + 10px);
+    right: 0;
+    width: 280px;
     background: var(--panel);
     border: 1px solid var(--border);
     border-radius: 14px;
     box-shadow: 0 8px 40px rgba(0,0,0,.35);
     z-index: 9999;
-    padding: 16px;
+    padding: 6px 0;
     display: none;
-    animation: tp-enter .18s ease-out both;
+    animation: tp-enter .16s ease-out both;
   }
-  #theme-panel.open { display: block; }
+  #profile-menu.open { display: block; }
   @keyframes tp-enter {
     from { opacity:0; transform:translateY(8px) scale(.97); }
     to   { opacity:1; transform:translateY(0) scale(1); }
   }
 
-  .tp-header {
+  .pm-header { padding: 12px 16px 10px; }
+  .pm-name   { font-weight: 600; font-size: .92rem; color: var(--fg); }
+  .pm-sub    { font-size: .72rem; color: color-mix(in srgb, var(--fg) 45%, transparent); margin-top: 1px; }
+  .pm-divider { border-top: 1px solid var(--border); margin: 6px 0; }
+  .pm-section-title {
+    padding: 6px 16px 6px;
+    font-size: .66rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: color-mix(in srgb, var(--fg) 45%, transparent);
+  }
+  .pm-item {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    margin-bottom: 14px;
-  }
-  .tp-title {
-    font-size: .78rem;
-    font-weight: 700;
-    font-family: ui-monospace, 'Courier New', monospace;
-    color: var(--fg);
-    letter-spacing: .06em;
-    text-transform: uppercase;
-    opacity: .7;
-  }
-  .tp-close {
+    gap: 10px;
+    width: 100%;
+    padding: 9px 16px;
+    font-size: .86rem;
+    font-weight: 500;
+    color: color-mix(in srgb, var(--fg) 82%, transparent);
+    text-decoration: none;
     background: none;
     border: none;
+    text-align: left;
     cursor: pointer;
-    color: var(--fg);
-    opacity: .4;
-    font-size: 1.1rem;
-    line-height: 1;
-    padding: 2px 5px;
-    border-radius: 4px;
-    transition: opacity .15s, background .15s;
   }
-  .tp-close:hover { opacity:.9; background: color-mix(in srgb, var(--fg) 10%, transparent); }
+  .pm-item:hover { background: color-mix(in srgb, var(--fg) 7%, transparent); }
+  .pm-item.danger { color: #dc2626; }
+  .pm-item svg { flex-shrink: 0; opacity: .7; }
 
   /* Theme swatch grid */
   #theme-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
     gap: 6px;
+    padding: 0 10px 8px;
   }
 
   .t-swatch {
@@ -256,38 +280,6 @@
     white-space: nowrap;
   }
 
-  /* Theme button in nav */
-  /* Floating theme switcher — fixed bottom-left, clear of nav and toasts */
-  #theme-btn {
-    position: fixed;
-    bottom: 16px;
-    left: 16px;
-    z-index: 9990;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 38px;
-    height: 38px;
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 50%;
-    cursor: pointer;
-    box-shadow: 0 2px 10px rgba(0,0,0,.18);
-    padding: 0;
-    transition: border-color .15s, transform .12s, box-shadow .15s;
-  }
-  #theme-btn:hover {
-    transform: scale(1.08);
-    box-shadow: 0 4px 14px rgba(0,0,0,.24);
-    border-color: color-mix(in srgb, var(--border) 140%, var(--fg) 10%);
-  }
-  #theme-btn .theme-dot {
-    width: 16px; height: 16px;
-    border-radius: 50%;
-    background: var(--red);
-    flex-shrink: 0;
-  }
-
   /* ── Mobile "More" menu (bottom sheet on phones) ── */
   #mobile-menu { background-color: var(--panel); }
   #mobile-menu a:active { background: color-mix(in srgb, var(--fg) 8%, transparent); }
@@ -304,16 +296,13 @@
     input[type="password"], input[type="date"], input[type="search"],
     select, textarea { font-size: 16px !important; }
 
-    #theme-panel {
+    #profile-menu {
+      position: fixed;
+      top: 64px;
       right: 8px;
       left: 8px;
       width: auto;
       max-width: none;
-      bottom: calc(118px + env(safe-area-inset-bottom));
-    }
-    /* Keep the floating theme button above the fixed tab bar */
-    #theme-btn {
-      bottom: calc(66px + env(safe-area-inset-bottom));
     }
     #toast-container {
       left: 1rem;
@@ -404,26 +393,55 @@
           </div>
           <div class="hidden sm:ml-4 sm:flex sm:space-x-3 lg:space-x-4 xl:space-x-7">
             <a href="/" class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center whitespace-nowrap px-1 pt-1 border-b-2 text-sm font-medium">Dashboard</a>
-            <a href="/upload" class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center whitespace-nowrap px-1 pt-1 border-b-2 text-sm font-medium">Upload</a>
             <a href="/transactions" class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center whitespace-nowrap px-1 pt-1 border-b-2 text-sm font-medium">Transactions</a>
             <a href="/anomalies" class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center whitespace-nowrap px-1 pt-1 border-b-2 text-sm font-medium">Anomalies</a>
             <a href="/recurring" class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center whitespace-nowrap px-1 pt-1 border-b-2 text-sm font-medium">Recurring</a>
             <a href="/budgets" class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center whitespace-nowrap px-1 pt-1 border-b-2 text-sm font-medium">Budgets</a>
-            <a href="/rules" class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center whitespace-nowrap px-1 pt-1 border-b-2 text-sm font-medium">Rules</a>
             <a href="/investments" class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center whitespace-nowrap px-1 pt-1 border-b-2 text-sm font-medium">Investments</a>
-            <a href="/connections" class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center whitespace-nowrap px-1 pt-1 border-b-2 text-sm font-medium">Connections</a>
             <a href="/chat" class="border-transparent text-violet-500 hover:border-violet-400 hover:text-violet-700 inline-flex items-center whitespace-nowrap px-1 pt-1 border-b-2 text-sm font-medium">AI Chat</a>
           </div>
         </div>
 
-        <!-- Right: logout -->
+        <!-- Right: account / settings -->
         <div class="flex items-center gap-2 flex-shrink-0 ml-3 whitespace-nowrap">
-          <form method="post" action="/logout" class="flex">
-            <button type="submit" id="logout-btn" title="Sign out"
-              class="px-2.5 py-1 text-xs font-medium text-gray-500 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
-              Sign out
+          <div id="profile-menu-wrap">
+            <button id="profile-btn" onclick="toggleProfileMenu()" title="Account &amp; settings" aria-haspopup="true" aria-expanded="false" aria-label="Account and settings">
+              {{ (current_username[0] if current_username else 'U')|upper }}
             </button>
-          </form>
+            <div id="profile-menu" role="menu" aria-label="Account and settings">
+              <div class="pm-header">
+                <p class="pm-name">{{ current_username or 'Account' }}</p>
+                <p class="pm-sub">Checkbook App</p>
+              </div>
+              <div class="pm-divider"></div>
+              <a href="/upload" class="pm-item" role="menuitem">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                Upload
+              </a>
+              <a href="/connections" class="pm-item" role="menuitem">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="14" height="10" rx="2"/><path d="M6 7V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-2"/></svg>
+                Connections
+              </a>
+              <a href="/rules" class="pm-item" role="menuitem">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21v-7"/><path d="M4 10V3"/><path d="M12 21v-9"/><path d="M12 8V3"/><path d="M20 21v-5"/><path d="M20 12V3"/><path d="M2 14h4"/><path d="M10 8h4"/><path d="M18 12h4"/></svg>
+                Rules
+              </a>
+              <a href="/sync-history" class="pm-item" role="menuitem">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 7v5l3 3"/></svg>
+                Sync History
+              </a>
+              <div class="pm-divider"></div>
+              <p class="pm-section-title">Theme</p>
+              <div id="theme-grid"></div>
+              <div class="pm-divider"></div>
+              <form method="post" action="/logout">
+                <button type="submit" id="logout-btn" class="pm-item danger" role="menuitem">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                  Sign out
+                </button>
+              </form>
+            </div>
+          </div>
         </div>
 
       </div>
@@ -435,31 +453,12 @@
   <div id="mobile-menu" class="sm:hidden hidden">
     <div class="px-3 pt-3 pb-2">
       <p class="px-3 pb-1 text-xs font-semibold uppercase tracking-wider text-gray-400">More</p>
-      <a href="/upload" class="block px-3 py-2 rounded-md text-base font-medium text-gray-500">Upload</a>
       <a href="/investments" class="block px-3 py-2 rounded-md text-base font-medium text-gray-500">Investments</a>
-      <a href="/connections" class="block px-3 py-2 rounded-md text-base font-medium text-gray-500">Connections</a>
-      <a href="/sync-history" class="block px-3 py-2 rounded-md text-base font-medium text-gray-500">Sync History</a>
       <a href="/anomalies" class="block px-3 py-2 rounded-md text-base font-medium text-gray-500">Anomalies</a>
       <a href="/recurring" class="block px-3 py-2 rounded-md text-base font-medium text-gray-500">Recurring</a>
-      <a href="/rules" class="block px-3 py-2 rounded-md text-base font-medium text-gray-500">Rules</a>
-      <form method="post" action="/logout">
-        <button type="submit" class="block w-full text-left px-3 py-2 rounded-md text-base font-medium text-gray-500">Sign out</button>
-      </form>
+      <p class="px-3 pt-3 pb-1 text-xs font-semibold uppercase tracking-wider text-gray-400 border-t border-gray-200 mt-2">Account &amp; settings</p>
+      <button type="button" onclick="closeMobileMenu(); toggleProfileMenu();" class="block w-full text-left px-3 py-2 rounded-md text-base font-medium text-gray-500">Settings</button>
     </div>
-  </div>
-
-  <!-- ── Floating theme switcher (bottom-left, out of the header) ── -->
-  <button id="theme-btn" onclick="toggleThemePanel()" title="Switch theme" aria-label="Switch theme">
-    <div class="theme-dot"></div>
-  </button>
-
-  <!-- ── Theme Picker Panel ── -->
-  <div id="theme-panel" role="dialog" aria-label="Theme picker">
-    <div class="tp-header">
-      <span class="tp-title">Theme</span>
-      <button class="tp-close" onclick="closeThemePanel()" title="Close">✕</button>
-    </div>
-    <div id="theme-grid"></div>
   </div>
 
   <main class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
@@ -536,12 +535,14 @@
     // Persist to localStorage
     try { localStorage.setItem(LS_KEY, JSON.stringify({ name: key, colors: t })); } catch(e){}
 
-    // Update theme dot in button
-    var dot = document.querySelector('#theme-btn .theme-dot');
-    if (dot) dot.style.background = t.red;
+    // Profile avatar reads var(--red) directly, no JS update needed.
 
     // Highlight active swatch
     highlightActiveTheme();
+
+    // Let pages with canvas-based charts (Chart.js bakes colors in at draw time,
+    // it doesn't read CSS vars live) know to rebuild with the new palette.
+    document.dispatchEvent(new CustomEvent('check:theme-changed', { detail: t }));
   }
 
   /* ── Highlight the active swatch in the picker ── */
@@ -573,22 +574,26 @@
     });
   }
 
-  /* ── Panel toggle ── */
-  function toggleThemePanel() {
-    var panel = document.getElementById('theme-panel');
-    if (!panel) return;
-    var isOpen = panel.classList.contains('open');
+  /* ── Profile / settings dropdown toggle ── */
+  function toggleProfileMenu() {
+    var menu = document.getElementById('profile-menu');
+    var btn  = document.getElementById('profile-btn');
+    if (!menu) return;
+    var isOpen = menu.classList.contains('open');
     if (isOpen) {
-      closeThemePanel();
+      closeProfileMenu();
     } else {
       buildThemeGrid();
-      panel.classList.add('open');
+      menu.classList.add('open');
       highlightActiveTheme();
+      if (btn) btn.setAttribute('aria-expanded', 'true');
     }
   }
-  function closeThemePanel() {
-    var panel = document.getElementById('theme-panel');
-    if (panel) panel.classList.remove('open');
+  function closeProfileMenu() {
+    var menu = document.getElementById('profile-menu');
+    var btn  = document.getElementById('profile-btn');
+    if (menu) menu.classList.remove('open');
+    if (btn) btn.setAttribute('aria-expanded', 'false');
   }
 
   /* ── Mobile menu toggle ── */
@@ -609,12 +614,12 @@
     if (e.target.closest('#mobile-menu a') || !e.target.closest('#mobile-menu')) closeMobileMenu();
   });
 
-  /* Close panel when clicking outside */
+  /* Close dropdown when clicking outside */
   document.addEventListener('click', function(e) {
-    var panel = document.getElementById('theme-panel');
-    var btn   = document.getElementById('theme-btn');
-    if (!panel || !panel.classList.contains('open')) return;
-    if (!panel.contains(e.target) && !btn.contains(e.target)) closeThemePanel();
+    var menu = document.getElementById('profile-menu');
+    var btn  = document.getElementById('profile-btn');
+    if (!menu || !menu.classList.contains('open')) return;
+    if (!menu.contains(e.target) && !btn.contains(e.target)) closeProfileMenu();
   });
 
   /* ── Restore saved theme on page load ── */
@@ -623,10 +628,7 @@
       var saved = JSON.parse(localStorage.getItem(LS_KEY));
       if (saved && saved.name && THEMES[saved.name]) {
         _activeTheme = saved.name;
-        // CSS vars already applied by the inline init script in <head>;
-        // just update the button dot color here.
-        var dot = document.querySelector('#theme-btn .theme-dot');
-        if (dot) dot.style.background = THEMES[saved.name].red;
+        // CSS vars already applied by the inline init script in <head>.
       }
     } catch(e){}
   })();
@@ -667,7 +669,7 @@
     else if (e.key === 'U') { spaNavigate('/upload'); }
     else if (e.key === 'I') { spaNavigate('/investments'); }
     else if (e.key === 'C') { spaNavigate('/chat'); }
-    else if (e.key === 'Escape') { closeThemePanel(); }
+    else if (e.key === 'Escape') { closeProfileMenu(); closeMobileMenu(); }
     else if (e.key === '/') {
       e.preventDefault();
       var s = document.getElementById('search');
@@ -733,7 +735,7 @@
   }
 
   function spaNavigate(url, push) {
-    closeThemePanel();
+    closeProfileMenu();
     closeMobileMenu();
     // Let the current page clean up before we tear down its DOM
     // (e.g. chat page aborts any in-progress stream)
