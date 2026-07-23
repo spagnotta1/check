@@ -45,7 +45,7 @@
                         '<td class="px-3 py-1.5 whitespace-nowrap text-gray-700">' + esc(row.date) + '</td>' +
                         '<td class="px-3 py-1.5 text-gray-700 max-w-xs truncate">' + esc(row.description) + '</td>' +
                         '<td class="px-3 py-1.5 text-right font-medium ' + amtClass + '">' +
-                            (isNaN(amt) ? esc(row.rawAmount) : '$' + Math.abs(amt).toFixed(2)) +
+                            (isNaN(amt) ? esc(row.rawAmount) : '$' + Math.abs(amt).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})) +
                         '</td>';
                     previewBody.appendChild(tr);
                     totalRows++;

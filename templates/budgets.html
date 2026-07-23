@@ -86,7 +86,7 @@
                     <tr id="display-{{ budget.id }}">
                         <td class="px-6 py-4 text-sm font-medium text-gray-900">{{ budget.category }}</td>
                         <td class="px-6 py-4 text-sm text-gray-500">{{ budget.account_name }}</td>
-                        <td class="px-6 py-4 text-sm text-gray-900">${{ "%.2f"|format(budget.monthly_limit) }}</td>
+                        <td class="px-6 py-4 text-sm text-gray-900">${{ "{:,.2f}".format(budget.monthly_limit) }}</td>
                         <td class="px-6 py-4 text-right space-x-3">
                             <button onclick="startEdit({{ budget.id }})" class="text-indigo-600 hover:text-indigo-800 text-sm font-medium">Edit</button>
                             <form method="POST" class="inline">

@@ -113,6 +113,12 @@ def create_app(test_config=None):
     migrate = Migrate(app, db)
     category_rules = CategoryRules()
 
+    @app.context_processor
+    def _inject_current_user():
+        uid = session.get('user_id')
+        user = AppUser.query.get(uid) if uid else None
+        return {'current_username': user.username if user else None}
+
     # ---------------------------------------------------------------------------
     # Login — a single owner account with a hashed password, created on first
     # run via /setup. Always on outside the test suite: this app fronts real
@@ -962,6 +968,23 @@ def create_app(test_config=None):
         try:
             db.session.commit()
             return jsonify({'success': True})
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({'success': False, 'error': str(e)})
+
+    @app.route('/anomalies/dismiss_all', methods=['POST'])
+    def dismiss_all_anomalies():
+        search_id = request.args.get('search_id')
+        query = Transaction.query.filter(Transaction.anomaly_score == -1.0, Transaction.anomaly_reviewed == False)
+        if search_id:
+            try:
+                query = query.filter(Transaction.id == int(search_id))
+            except ValueError:
+                pass
+        try:
+            count = query.update({Transaction.anomaly_reviewed: True}, synchronize_session=False)
+            db.session.commit()
+            return jsonify({'success': True, 'count': count})
         except Exception as e:
             db.session.rollback()
             return jsonify({'success': False, 'error': str(e)})

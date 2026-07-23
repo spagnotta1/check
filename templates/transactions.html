@@ -222,7 +222,7 @@
                                 </select>
                             </td>
                             <td class="px-4 py-4 whitespace-nowrap text-sm font-medium {% if transaction.amount >= 0 %}text-green-600{% else %}text-red-600{% endif %}">
-                                ${{ "%.2f"|format(transaction.amount) }}
+                                ${{ "{:,.2f}".format(transaction.amount) }}
                             </td>
                             <td class="px-4 py-4 whitespace-nowrap text-right text-sm space-x-3">
                                 {% if transaction.notes %}
@@ -550,7 +550,7 @@ function saveEdit() {
                 row.cells[3].title = t.description;
                 row.cells[4].textContent = t.account_name;
                 var amtCell = row.cells[6];
-                amtCell.textContent = '$' + Math.abs(t.amount).toFixed(2);
+                amtCell.textContent = '$' + Math.abs(t.amount).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
                 amtCell.className = 'px-4 py-4 whitespace-nowrap text-sm font-medium ' + (t.amount >= 0 ? 'text-green-600' : 'text-red-600');
                 var catSel = row.querySelector('.category-select');
                 if (catSel) { catSel.value = t.category; catSel.dataset.originalValue = t.category; }
